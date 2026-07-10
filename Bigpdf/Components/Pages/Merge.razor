@@ -1,0 +1,11 @@
+@page "/merge"
+@using Bigpdf.Models
+@using Bigpdf.Components.Shared
+
+<Workspace Title="Merge PDF Files" 
+           Subtitle="Combine multiple PDF documents into a single organized file in seconds." 
+           Gradient="var(--grad-merge)" 
+           FileFilter=".pdf" 
+           AllowMultiple="true" 
+           OutputName="merged.pdf"
+           JobTaskType="JobType.Merge" />

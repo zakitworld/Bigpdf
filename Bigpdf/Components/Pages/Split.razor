@@ -1,0 +1,69 @@
+@page "/split"
+@using Bigpdf.Models
+@using Bigpdf.Services
+@using Bigpdf.Components.Shared
+@inject IJobService JobService
+
+<Workspace Title="Split PDF" 
+           Subtitle="Extract specific pages or split pages into separate documents." 
+           Gradient="var(--grad-split)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="split.pdf"
+           OnDirectSubmit="HandleSplit">
+    <SettingsTemplate>
+        <div class="form-group" style="margin: 0;">
+            <label class="form-label" for="pages-input">Pages to extract (e.g. 1, 3, 5-8):</label>
+            <input id="pages-input" class="form-control" @bind="_pages" placeholder="e.g. 1, 3, 5-8" />
+        </div>
+    </SettingsTemplate>
+</Workspace>
+
+@code {
+    private string _pages = "1";
+
+    private async Task HandleSplit(Workspace.WorkspaceSubmitEventArgs args)
+    {
+        if (string.IsNullOrWhiteSpace(_pages))
+        {
+            args.Result = new PdfOperationResult(false, "Please specify page ranges.");
+            return;
+        }
+
+        if (!PageRangeParser.TryParse(_pages, out _, out var parseError))
+        {
+            args.Result = new PdfOperationResult(false, parseError ?? "Invalid page range format.");
+            return;
+        }
+
+        var rel = Path.Combine("uploads", args.SelectedFiles.First()).Replace('\\', '/');
+        var req = new JobRequest
+        {
+            Type = JobType.Split,
+            InputRelativePath = rel,
+            Parameters = new Dictionary<string, string>
+            {
+                ["pages"] = _pages,
+                ["output"] = args.OutputName
+            }
+        };
+
+        var job = await JobService.EnqueueJobAsync(req);
+        while (job.Status == JobStatus.Pending || job.Status == JobStatus.Running)
+        {
+            await Task.Delay(1000);
+            var updated = JobService.GetJob(job.Id);
+            if (updated == null) break;
+            job = updated;
+        }
+
+        if (job.Status == JobStatus.Completed)
+        {
+            args.Result = new PdfOperationResult(true, job.Message ?? "PDF split completed successfully.", job.ResultPath);
+        }
+        else
+        {
+            args.Result = new PdfOperationResult(false, job.Message ?? "Failed to split PDF.");
+        }
+    }
+}

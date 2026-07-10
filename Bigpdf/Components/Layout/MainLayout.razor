@@ -1,0 +1,51 @@
+@inherits LayoutComponentBase
+
+<header class="site-header">
+    <div class="site-brand">
+        <a href="/">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            Big<span>pdf</span>
+        </a>
+    </div>
+    <nav class="site-nav">
+        <a href="/">Dashboard</a>
+        <a href="/compress">Compress</a>
+        <a href="/merge">Merge</a>
+        <a href="/split">Split</a>
+        <a href="/pdftojpg">PDF to JPG</a>
+        <a href="/ocr">OCR</a>
+        <a href="/office">PDF to Word</a>
+        <a href="/convert">Images to PDF</a>
+        <a href="/watermark">Watermark</a>
+        <a href="/pagenumbers">Page #</a>
+        <a href="/jobs">Jobs</a>
+        <AuthorizeView>
+            <Authorized>
+                <span class="nav-user">@context.User.Identity?.Name</span>
+                <form method="post" action="/logout" class="nav-logout" style="display: inline;">
+                    <button type="submit" class="btn-signout">Sign out</button>
+                </form>
+            </Authorized>
+            <NotAuthorized>
+                <a href="/login" class="btn btn-primary" style="color: white; padding: 0.4rem 1rem;">Sign in</a>
+            </NotAuthorized>
+        </AuthorizeView>
+    </nav>
+</header>
+
+<main class="site-main">
+    @Body
+</main>
+
+<footer class="site-footer">
+    <p>&copy; @DateTime.UtcNow.Year Bigpdf. Built to industry standards using .NET Blazor Server &amp; PdfSharpCore.</p>
+</footer>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>

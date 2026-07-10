@@ -1,0 +1,108 @@
+@page "/jobs"
+@using Bigpdf.Models
+@using Bigpdf.Services
+@inject IJobService JobService
+
+<div class="workspace-wrapper">
+    <h2 class="page-title">Background Jobs</h2>
+    <p class="page-subtitle">Monitor and track the status of all queued and completed PDF processing tasks.</p>
+
+    <div class="workspace-container">
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 1.5rem;">
+            <button class="btn btn-secondary" @onclick="Refresh" style="display: flex; align-items: center; gap: 0.35rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"/>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                Refresh
+            </button>
+        </div>
+
+        @if (_jobs is null || !_jobs.Any())
+        {
+            <div class="alert alert-warning">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem;">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                No jobs found. Jobs are created when you use tools like Compress, Merge, OCR, or PDF to Word.
+            </div>
+        }
+        else
+        {
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border-color); text-align: left;">
+                            <th style="padding: 0.75rem; font-weight: 600; color: var(--text-secondary);">ID</th>
+                            <th style="padding: 0.75rem; font-weight: 600; color: var(--text-secondary);">Type</th>
+                            <th style="padding: 0.75rem; font-weight: 600; color: var(--text-secondary);">Status</th>
+                            <th style="padding: 0.75rem; font-weight: 600; color: var(--text-secondary);">Message</th>
+                            <th style="padding: 0.75rem; font-weight: 600; color: var(--text-secondary);">Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var j in _jobs)
+                        {
+                            <tr style="border-bottom: 1px solid var(--border-color); transition: var(--transition);">
+                                <td style="padding: 0.75rem; font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">@j.Id[..Math.Min(8, j.Id.Length)]</td>
+                                <td style="padding: 0.75rem; font-weight: 500;">@j.Type</td>
+                                <td style="padding: 0.75rem;">
+                                    @switch (j.Status)
+                                    {
+                                        case JobStatus.Pending:
+                                            <span style="padding: 0.2rem 0.6rem; border-radius: var(--radius-full); background: var(--warning-light); color: var(--warning); font-size: 0.8rem; font-weight: 600;">Pending</span>
+                                            break;
+                                        case JobStatus.Running:
+                                            <span style="padding: 0.2rem 0.6rem; border-radius: var(--radius-full); background: var(--primary-light); color: var(--primary); font-size: 0.8rem; font-weight: 600;">Running</span>
+                                            break;
+                                        case JobStatus.Completed:
+                                            <span style="padding: 0.2rem 0.6rem; border-radius: var(--radius-full); background: var(--success-light); color: var(--success); font-size: 0.8rem; font-weight: 600;">Completed</span>
+                                            break;
+                                        case JobStatus.Failed:
+                                            <span style="padding: 0.2rem 0.6rem; border-radius: var(--radius-full); background: var(--error-light); color: var(--error); font-size: 0.8rem; font-weight: 600;">Failed</span>
+                                            break;
+                                    }
+                                </td>
+                                <td style="padding: 0.75rem; color: var(--text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@(j.Message ?? "—")</td>
+                                <td style="padding: 0.75rem;">
+                                    @if (j.ResultPath is not null)
+                                    {
+                                        <a href="@UploadPaths.ToPublicUrl(j.ResultPath)" target="_blank" download class="btn btn-primary" style="padding: 0.25rem 0.6rem; font-size: 0.8rem;">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.2rem;">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                <polyline points="7 10 12 15 17 10"/>
+                                                <line x1="12" y1="15" x2="12" y2="3"/>
+                                            </svg>
+                                            Download
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span style="color: var(--text-muted);">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@code{
+    private IEnumerable<JobInfo>? _jobs;
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+    }
+
+    private void Refresh()
+    {
+        // Use IJobService directly instead of HttpClient (which can't authenticate in Blazor Server)
+        _jobs = JobService.ListJobs().OrderByDescending(j => j.CreatedAt).ToList();
+    }
+}

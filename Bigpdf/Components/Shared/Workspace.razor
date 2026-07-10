@@ -1,0 +1,354 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using Bigpdf.Services
+@using Bigpdf.Models
+@inject IPdfService PdfService
+@inject IJobService JobService
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+
+<div class="workspace-wrapper" style="--tool-gradient: @Gradient;">
+    <h2 class="page-title">@Title</h2>
+    <p class="page-subtitle">@Subtitle</p>
+
+    <div class="workspace-container">
+        @if (_isProcessing)
+        {
+            <div class="spinner-wrapper">
+                <div class="spinner"></div>
+                <p style="font-weight: 600; color: var(--text-secondary);">@_processingText</p>
+                @if (!string.IsNullOrEmpty(_jobId))
+                {
+                    <Bigpdf.Components.JobTracker JobId="@_jobId" OnCompleted="OnJobFinished" />
+                }
+            </div>
+        }
+        else
+        {
+            @if (_result is not null)
+            {
+                <div class="alert @(_result.Success ? "alert-success" : "alert-error")" style="margin-bottom: 2rem;">
+                    @if (_result.Success)
+                    {
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem;">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    }
+                    else
+                    {
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem;">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                    }
+                    <div>
+                        <strong>@_result.Message</strong>
+                        @if (_result.OutputRelativePath is not null)
+                        {
+                            <div style="margin-top: 0.5rem;">
+                                <a href="@UploadPaths.ToPublicUrl(_result.OutputRelativePath)" class="btn btn-primary" style="color: white; text-decoration: none;" download target="_blank">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.25rem; display: inline;">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="7 10 12 15 17 10"/>
+                                        <line x1="12" y1="15" x2="12" y2="3"/>
+                                    </svg> Download File
+                                </a>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Step 1: File Selection -->
+            <div class="form-group">
+                <span class="form-label">Step 1: Upload or select document(s)</span>
+                
+                <!-- Custom Drag and Drop Zone -->
+                <div class="dropzone @(_isDragging ? "drag-over" : "")" style="position: relative; overflow: hidden;">
+                    <span class="dropzone-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                    </span>
+                    <p>Drag and drop your file here, or <span class="highlight">browse device</span></p>
+                    <span class="hint">Allowed types: @(FileFilter ?? "Any") (Max size: 50MB)</span>
+                    <InputFile OnChange="HandleFileSelected" 
+                               multiple="@AllowMultiple" 
+                               style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;"
+                               @ondragenter="HandleDragEnter"
+                               @ondragleave="HandleDragLeave" />
+                </div>
+            </div>
+
+            <!-- Stored files selector tab -->
+            @if (_savedFiles?.Any() == true)
+            {
+                <div class="form-group" style="margin-top: 1.5rem;">
+                    <span class="form-label" style="display: flex; justify-content: space-between;">
+                        <span>Or select from recently uploaded files:</span>
+                        <a href="javascript:void(0)" @onclick="ClearSelection" style="font-size: 0.8rem; color: var(--primary); text-decoration: none; font-weight: 600;">Clear selection</a>
+                    </span>
+                    <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.5rem; background: var(--bg-main);">
+                        @foreach (var f in _savedFiles)
+                        {
+                            var extension = Path.GetExtension(f).ToLowerInvariant();
+                            var isAllowed = string.IsNullOrEmpty(FileFilter) || FileFilter.Split(',').Select(x => x.Trim().ToLowerInvariant()).Contains(extension);
+                            
+                            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem; opacity: @(isAllowed ? "1" : "0.5"); pointer-events: @(isAllowed ? "auto" : "none");">
+                                @if (AllowMultiple)
+                                {
+                                    <input type="checkbox" id="@f" checked="@_selectedFiles.Contains(f)" @onchange="e => ToggleFile(e, f)" style="width: 16px; height: 16px;" />
+                                }
+                                else
+                                {
+                                    <input type="radio" id="@f" name="selected-file" checked="@(_selectedFiles.FirstOrDefault() == f)" @onchange="() => SelectSingleFile(f)" style="width: 16px; height: 16px;" />
+                                }
+                                <label for="@f" style="font-size: 0.9rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 0.35rem; width: 100%;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary);">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                        <polyline points="14 2 14 8 20 8"/>
+                                    </svg>
+                                    @f
+                                </label>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (_selectedFiles.Any())
+            {
+                <div class="alert alert-success" style="padding: 0.75rem 1rem; font-size: 0.9rem;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem;">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Selected: @string.Join(", ", _selectedFiles)
+                </div>
+            }
+
+            @if (SettingsTemplate is not null)
+            {
+                <!-- Step 2: Settings Configuration -->
+                <div class="form-group" style="margin-top: 2rem;">
+                    <span class="form-label">Step 2: Configure Settings</span>
+                    <div style="background: var(--bg-main); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                        @SettingsTemplate
+                    </div>
+                </div>
+            }
+
+            <!-- Step 3: Run -->
+            <div class="form-group" style="margin-top: 2rem;">
+                <span class="form-label">Step @(SettingsTemplate is not null ? "3" : "2"): Execute Task</span>
+                <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                    <div style="flex-grow: 1; min-width: 250px;">
+                        <input class="form-control" placeholder="Output File Name" @bind="OutputName" />
+                    </div>
+                    <button class="btn btn-primary" @onclick="SubmitTask" style="min-width: 150px; background: var(--tool-gradient);">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.25rem;">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg> Process
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "PDF Tool";
+    [Parameter] public string Subtitle { get; set; } = "Execute PDF tasks with high performance.";
+    [Parameter] public string Gradient { get; set; } = "var(--primary)";
+    [Parameter] public bool AllowMultiple { get; set; } = false;
+    [Parameter] public string? FileFilter { get; set; }
+    [Parameter] public string OutputName { get; set; } = "result.pdf";
+    [Parameter] public RenderFragment? SettingsTemplate { get; set; }
+    [Parameter] public JobType? JobTaskType { get; set; }
+    
+    // For synchronous tasks that do not use Job queue
+    [Parameter] public EventCallback<WorkspaceSubmitEventArgs> OnDirectSubmit { get; set; }
+
+    private IEnumerable<string>? _savedFiles;
+    private List<string> _selectedFiles = new();
+    private bool _isDragging = false;
+    private bool _isProcessing = false;
+    private string _processingText = "Uploading file...";
+    private string? _jobId;
+    private PdfOperationResult? _result;
+
+    private const long MaxFileSize = 1024 * 1024 * 50; // 50 MB
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFilesAsync();
+    }
+
+    private async Task LoadFilesAsync()
+    {
+        _savedFiles = await PdfService.ListFilesAsync();
+    }
+
+    private void ToggleFile(ChangeEventArgs e, string file)
+    {
+        var isChecked = e.Value is bool b ? b : string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+        if (isChecked)
+        {
+            if (!_selectedFiles.Contains(file)) _selectedFiles.Add(file);
+        }
+        else
+        {
+            _selectedFiles.Remove(file);
+        }
+    }
+
+    private void SelectSingleFile(string file)
+    {
+        _selectedFiles.Clear();
+        _selectedFiles.Add(file);
+    }
+
+    private void ClearSelection()
+    {
+        _selectedFiles.Clear();
+    }
+
+    private void HandleDragEnter() => _isDragging = true;
+    private void HandleDragLeave() => _isDragging = false;
+
+
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        _isProcessing = true;
+        _processingText = "Saving uploaded files...";
+        _result = null;
+        StateHasChanged();
+
+        try
+        {
+            var files = e.GetMultipleFiles(AllowMultiple ? 20 : 1);
+            foreach (var f in files)
+            {
+                await using var stream = f.OpenReadStream(MaxFileSize);
+                var relative = await PdfService.SaveFileAsync(stream, f.Name, f.ContentType);
+                if (relative != null)
+                {
+                    var baseName = Path.GetFileName(relative);
+                    if (AllowMultiple)
+                    {
+                        if (!_selectedFiles.Contains(baseName)) _selectedFiles.Add(baseName);
+                    }
+                    else
+                    {
+                        SelectSingleFile(baseName);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _result = new PdfOperationResult(false, $"Upload failed: {ex.Message}");
+        }
+        finally
+        {
+            _isProcessing = false;
+            await LoadFilesAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task SubmitTask()
+    {
+        if (!_selectedFiles.Any())
+        {
+            _result = new PdfOperationResult(false, "Please select or upload at least one file first.");
+            return;
+        }
+
+        _result = null;
+
+        if (OnDirectSubmit.HasDelegate)
+        {
+            _isProcessing = true;
+            _processingText = "Processing PDF operation...";
+            StateHasChanged();
+
+            try
+            {
+                var args = new WorkspaceSubmitEventArgs { SelectedFiles = _selectedFiles, OutputName = OutputName };
+                await OnDirectSubmit.InvokeAsync(args);
+                
+                if (args.Result != null)
+                {
+                    _result = args.Result;
+                }
+            }
+            catch (Exception ex)
+            {
+                _result = new PdfOperationResult(false, $"Operation failed: {ex.Message}");
+            }
+            finally
+            {
+                _isProcessing = false;
+                await LoadFilesAsync();
+                StateHasChanged();
+            }
+        }
+        else if (JobTaskType.HasValue)
+        {
+            _isProcessing = true;
+            _processingText = "Queuing background task...";
+            StateHasChanged();
+
+            try
+            {
+                var inputPaths = string.Join(',', _selectedFiles.Select(f => Path.Combine("uploads", f).Replace('\\', '/')));
+                var req = new JobRequest 
+                { 
+                    Type = JobTaskType.Value, 
+                    InputRelativePath = inputPaths, 
+                    OutputName = OutputName 
+                };
+
+                var job = await JobService.EnqueueJobAsync(req);
+                _jobId = job.Id;
+                _processingText = "Background task running...";
+            }
+            catch (Exception ex)
+            {
+                _result = new PdfOperationResult(false, $"Error queuing job: {ex.Message}");
+                _isProcessing = false;
+            }
+            StateHasChanged();
+        }
+    }
+
+    private Task OnJobFinished(JobInfo job)
+    {
+        _isProcessing = false;
+        _jobId = null;
+
+        if (job.Status == JobStatus.Completed && !string.IsNullOrEmpty(job.ResultPath))
+        {
+            _result = new PdfOperationResult(true, job.Message ?? "Operation completed successfully!", job.ResultPath);
+        }
+        else
+        {
+            _result = new PdfOperationResult(false, job.Message ?? "Operation failed on the server.");
+        }
+        
+        _ = LoadFilesAsync();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    public class WorkspaceSubmitEventArgs
+    {
+        public List<string> SelectedFiles { get; set; } = new();
+        public string OutputName { get; set; } = string.Empty;
+        public PdfOperationResult? Result { get; set; }
+    }
+}

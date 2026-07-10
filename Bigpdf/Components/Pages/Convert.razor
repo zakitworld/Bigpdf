@@ -1,0 +1,23 @@
+@page "/convert"
+@using Bigpdf.Models
+@using Bigpdf.Services
+@using Bigpdf.Components.Shared
+@inject IPdfProcessor PdfProcessor
+
+<Workspace Title="Images to PDF" 
+           Subtitle="Convert your JPG, JPEG, and PNG images into a clean, single PDF document." 
+           Gradient="var(--grad-img)" 
+           FileFilter=".jpg,.jpeg,.png" 
+           AllowMultiple="true" 
+           OutputName="images-converted.pdf"
+           OnDirectSubmit="HandleImageToPdf" />
+
+@code {
+    private async Task HandleImageToPdf(Workspace.WorkspaceSubmitEventArgs args)
+    {
+        var relPaths = args.SelectedFiles.Select(f => Path.Combine("uploads", f).Replace('\\', '/')).ToList();
+        
+        var result = await PdfProcessor.ConvertJpgToPdfAsync(relPaths, args.OutputName);
+        args.Result = result;
+    }
+}

@@ -1,0 +1,138 @@
+@inject IJobService JobService
+@implements IDisposable
+
+@if (_job is not null)
+{
+    <div class="job-card">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <strong style="font-size: 0.95rem; color: var(--text-primary);">Job Tracker: @JobId?.Substring(0, Math.Min(8, JobId.Length))</strong>
+            </div>
+            
+            <div>
+                @switch (_job.Status)
+                {
+                    case JobStatus.Pending:
+                        <span class="alert alert-warning" style="padding: 0.25rem 0.6rem; margin: 0; font-size: 0.8rem; border-radius: var(--radius-full); display: inline-flex;">Pending</span>
+                        break;
+                    case JobStatus.Running:
+                        <span class="alert alert-success" style="padding: 0.25rem 0.6rem; margin: 0; font-size: 0.8rem; border-radius: var(--radius-full); display: inline-flex; background: var(--primary-light); color: var(--primary); border-color: transparent;">Processing</span>
+                        break;
+                    case JobStatus.Completed:
+                        <span class="alert alert-success" style="padding: 0.25rem 0.6rem; margin: 0; font-size: 0.8rem; border-radius: var(--radius-full); display: inline-flex;">Completed</span>
+                        break;
+                    case JobStatus.Failed:
+                        <span class="alert alert-error" style="padding: 0.25rem 0.6rem; margin: 0; font-size: 0.8rem; border-radius: var(--radius-full); display: inline-flex;">Failed</span>
+                        break;
+                }
+            </div>
+        </div>
+
+        @if (_job.Status == JobStatus.Running || _job.Status == JobStatus.Pending)
+        {
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <div class="spinner" style="width: 1.5rem; height: 1.5rem; border-width: 3px;"></div>
+                <span class="job-progress" style="font-size: 0.9rem; font-weight: 500;">Performing operation on document(s)...</span>
+            </div>
+        }
+        else if (_job.Status == JobStatus.Completed)
+        {
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <span style="font-size: 0.9rem; font-weight: 600; color: var(--success);">@(_job.Message ?? "Operation completed successfully!")</span>
+                @if (!string.IsNullOrEmpty(_job.ResultPath))
+                {
+                    <div style="margin-top: 0.25rem;">
+                        <a href="@UploadPaths.ToPublicUrl(_job.ResultPath)" class="btn btn-primary" style="padding: 0.45rem 1rem; font-size: 0.85rem;" target="_blank" download>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.25rem;">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg> Download output
+                        </a>
+                    </div>
+                }
+            </div>
+        }
+        else if (_job.Status == JobStatus.Failed)
+        {
+            <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="job-error" style="font-size: 0.9rem; font-weight: 600;">Error: @(_job.Message ?? "Job execution failed.")</span>
+                
+                @if (_job.Message != null && (_job.Message.Contains("Ghostscript") || _job.Message.Contains("Tesseract") || _job.Message.Contains("LibreOffice")))
+                {
+                    <div class="alert alert-warning" style="margin-top: 0.5rem; font-size: 0.8rem; padding: 0.5rem 0.75rem;">
+                        <strong>Deployment Note:</strong> External command dependencies are missing from host. Make sure to download and register them in host system PATH variables.
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? JobId { get; set; }
+    [Parameter] public EventCallback<JobInfo> OnCompleted { get; set; }
+
+    private JobInfo? _job;
+    private CancellationTokenSource? _pollCts;
+
+    protected override void OnParametersSet()
+    {
+        if (string.IsNullOrEmpty(JobId))
+            return;
+
+        StopPolling();
+        _pollCts = new CancellationTokenSource();
+        _ = PollJobAsync(_pollCts.Token);
+    }
+
+    private async Task PollJobAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                // Use injected IJobService directly instead of HttpClient
+                // HttpClient in Blazor Server doesn't carry user auth cookies
+                var job = JobService.GetJob(JobId!);
+                if (job is not null)
+                {
+                    _job = job;
+                    await InvokeAsync(StateHasChanged);
+
+                    if (job.Status is JobStatus.Completed or JobStatus.Failed)
+                    {
+                        await OnCompleted.InvokeAsync(job);
+                        break;
+                    }
+                }
+            }
+            catch
+            {
+                // keep polling until cancelled
+            }
+
+            try
+            {
+                await Task.Delay(1500, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    private void StopPolling()
+    {
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+        _pollCts = null;
+    }
+
+    public void Dispose() => StopPolling();
+}

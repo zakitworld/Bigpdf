@@ -1,0 +1,11 @@
+@page "/office"
+@using Bigpdf.Models
+@using Bigpdf.Components.Shared
+
+<Workspace Title="PDF to Word Document" 
+           Subtitle="Convert your PDF files to editable Microsoft Word (DOCX) files using LibreOffice headless rendering." 
+           Gradient="var(--grad-word)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="converted.docx"
+           JobTaskType="JobType.PdfToWord" />

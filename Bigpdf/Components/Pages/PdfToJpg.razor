@@ -1,0 +1,87 @@
+@page "/pdftojpg"
+@using Bigpdf.Models
+@using Bigpdf.Services
+@using Bigpdf.Components.Shared
+@inject IJobService JobService
+@inject IPdfService PdfService
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
+
+<Workspace Title="PDF to JPG Converter" 
+           Subtitle="Extract high-resolution images or render entire PDF pages into JPEG format." 
+           Gradient="var(--grad-jpg)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="pages"
+           OnDirectSubmit="HandlePdfToJpg" />
+
+@if (_images.Any())
+{
+    <div class="storage-section" style="margin-top: 2rem;">
+        <h4 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+            </svg>
+            Generated Page Images
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem;">
+            @foreach (var img in _images)
+            {
+                <div style="border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; background: var(--bg-main); text-align: center; box-shadow: var(--shadow-sm); transition: var(--transition);">
+                    <img src="@img" style="width: 100%; height: auto; display: block; border-bottom: 1px solid var(--border-color);" />
+                    <div style="padding: 0.5rem;">
+                        <a href="@img" target="_blank" download class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; width: 100%;">Download Image</a>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<string> _images = new();
+
+    private async Task HandlePdfToJpg(Workspace.WorkspaceSubmitEventArgs args)
+    {
+        _images.Clear();
+        var rel = Path.Combine("uploads", args.SelectedFiles.First()).Replace('\\', '/');
+        var req = new JobRequest { Type = JobType.PdfToJpg, InputRelativePath = rel };
+
+        var job = await JobService.EnqueueJobAsync(req);
+        
+        // Poll with async delay (non-blocking) instead of a tight while loop
+        while (job.Status == JobStatus.Pending || job.Status == JobStatus.Running)
+        {
+            await Task.Delay(1000);
+            var updated = JobService.GetJob(job.Id);
+            if (updated == null) break;
+            job = updated;
+        }
+
+        if (job.Status == JobStatus.Completed && !string.IsNullOrEmpty(job.ResultPath))
+        {
+            args.Result = new PdfOperationResult(true, job.Message ?? "Rendered PDF to JPG images.", job.ResultPath);
+            
+            // List the generated image files directly from disk instead of using HttpClient API
+            try
+            {
+                if (UploadPaths.TryResolveUploadPath(Env, job.ResultPath, out var fullPath) && Directory.Exists(fullPath))
+                {
+                    var uploadsRoot = UploadPaths.GetUploadsRoot(Env);
+                    _images = Directory.EnumerateFiles(fullPath)
+                        .OrderBy(f => f)
+                        .Select(f => UploadPaths.ToPublicUrl(Path.Combine("uploads", Path.GetRelativePath(uploadsRoot, f))))
+                        .ToList();
+                }
+            }
+            catch
+            {
+                // Ignore — user can still download from result path
+            }
+        }
+        else
+        {
+            args.Result = new PdfOperationResult(false, job.Message ?? "Failed to convert PDF to JPG.");
+        }
+    }
+}

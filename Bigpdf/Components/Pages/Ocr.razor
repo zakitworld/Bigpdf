@@ -1,0 +1,11 @@
+@page "/ocr"
+@using Bigpdf.Models
+@using Bigpdf.Components.Shared
+
+<Workspace Title="OCR Text Extraction" 
+           Subtitle="Convert scanned PDF documents into search-ready, editable text using optical character recognition." 
+           Gradient="var(--grad-ocr)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="ocr_output.txt"
+           JobTaskType="JobType.OcrPdf" />

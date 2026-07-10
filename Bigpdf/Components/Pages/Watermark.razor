@@ -1,0 +1,37 @@
+@page "/watermark"
+@using Bigpdf.Models
+@using Bigpdf.Services
+@using Bigpdf.Components.Shared
+@inject IPdfProcessor PdfProcessor
+
+<Workspace Title="Watermark PDF" 
+           Subtitle="Add a clean text watermark stamp overlay to all pages of your PDF document." 
+           Gradient="var(--grad-watermark)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="watermarked.pdf"
+           OnDirectSubmit="HandleWatermark">
+    <SettingsTemplate>
+        <div class="form-group" style="margin: 0;">
+            <label class="form-label" for="watermark-input">Watermark Text:</label>
+            <input id="watermark-input" class="form-control" @bind="_watermark" placeholder="e.g. DRAFT, CONFIDENTIAL, SAMPLE" />
+        </div>
+    </SettingsTemplate>
+</Workspace>
+
+@code {
+    private string _watermark = "SAMPLE";
+
+    private async Task HandleWatermark(Workspace.WorkspaceSubmitEventArgs args)
+    {
+        if (string.IsNullOrWhiteSpace(_watermark))
+        {
+            args.Result = new PdfOperationResult(false, "Please specify watermark text.");
+            return;
+        }
+
+        var rel = Path.Combine("uploads", args.SelectedFiles.First()).Replace('\\', '/');
+        var result = await PdfProcessor.AddWatermarkAsync(rel, _watermark, args.OutputName);
+        args.Result = result;
+    }
+}

@@ -1,0 +1,22 @@
+@page "/pagenumbers"
+@using Bigpdf.Models
+@using Bigpdf.Services
+@using Bigpdf.Components.Shared
+@inject IPdfProcessor PdfProcessor
+
+<Workspace Title="Add Page Numbers" 
+           Subtitle="Number your PDF pages instantly with clean bottom-center pagination formats." 
+           Gradient="var(--grad-pagenum)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="numbered.pdf"
+           OnDirectSubmit="HandlePageNumbers" />
+
+@code {
+    private async Task HandlePageNumbers(Workspace.WorkspaceSubmitEventArgs args)
+    {
+        var rel = Path.Combine("uploads", args.SelectedFiles.First()).Replace('\\', '/');
+        var result = await PdfProcessor.AddPageNumbersAsync(rel, args.OutputName);
+        args.Result = result;
+    }
+}

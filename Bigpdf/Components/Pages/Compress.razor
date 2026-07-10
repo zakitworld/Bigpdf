@@ -1,0 +1,11 @@
+@page "/compress"
+@using Bigpdf.Models
+@using Bigpdf.Components.Shared
+
+<Workspace Title="Compress PDF File" 
+           Subtitle="Reduce file size dramatically while maintaining high resolution and page fidelity." 
+           Gradient="var(--grad-compress)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="compressed.pdf"
+           JobTaskType="JobType.CompressPdf" />

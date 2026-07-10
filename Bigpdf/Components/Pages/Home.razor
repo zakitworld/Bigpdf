@@ -226,22 +226,29 @@
             {
                 await using var stream = file.OpenReadStream(MaxFileSize);
                 var relative = await PdfService.SaveFileAsync(stream, file.Name, file.ContentType);
-                if (relative != null)
+                var result = relative != null
+                    ? new UploadResult(true, file.Name, relative)
+                    : new UploadResult(false, $"Save failed for {file.Name}");
+
+                // Ensure UI updates happen on the renderer synchronization context
+                await InvokeAsync(() =>
                 {
-                    _results.Add(new UploadResult(true, file.Name, relative));
-                }
-                else
-                {
-                    _results.Add(new UploadResult(false, $"Save failed for {file.Name}"));
-                }
+                    _results.Add(result);
+                    StateHasChanged();
+                });
             }
             catch (Exception ex)
             {
-                _results.Add(new UploadResult(false, ex.Message));
+                await InvokeAsync(() =>
+                {
+                    _results.Add(new UploadResult(false, ex.Message));
+                    StateHasChanged();
+                });
             }
         }
 
         await RefreshFiles();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task DeleteFile(string filename)

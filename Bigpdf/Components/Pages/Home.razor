@@ -2,6 +2,8 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using Bigpdf.Services
 @using Bigpdf.Models
+@using System.IO
+@implements IDisposable
 @inject IPdfService PdfService
 @inject NavigationManager NavigationManager
 
@@ -132,7 +134,7 @@
 
     <div style="margin-bottom: 1.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
         <span class="hint" style="flex-grow: 1;">Upload files directly here to make them available for quick workflows.</span>
-        <InputFile OnChange="HandleQuickUpload" multiple class="btn btn-secondary" style="font-size: 0.85rem;" />
+        <input @ref="_fileInputRef" type="file" multiple class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.35rem 0.6rem;" @onchange="StartJsUpload" />
     </div>
 
     @if (_results?.Any() == true)
@@ -142,6 +144,30 @@
             {
                 <div class="alert @(r.Success ? "alert-success" : "alert-error")" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
                     @(r.Success ? "Successfully uploaded: " : "Failed: ") @r.Message
+                </div>
+            }
+        </div>
+    }
+
+    @if (_uploadStatus?.Any() == true)
+    {
+        <div style="margin-bottom:1rem;">
+            @foreach (var kv in _uploadStatus)
+            {
+                <div class="upload-status">
+                    <div style="width:18px; height:18px;">
+                        @if (kv.Value.Status == "Uploading...")
+                        {
+                            <svg class="spinner" width="18" height="18" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="31.4 31.4" transform="rotate(-90 25 25)"></circle></svg>
+                        }
+                    </div>
+                    <div style="flex:1">@kv.Key</div>
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <div class="progress-container">
+                            <div class="progress-fill" style="@($"width:{kv.Value.Percent:F0}%")"></div>
+                        </div>
+                        <div style="width:48px; text-align:right; font-variant-numeric: tabular-nums;">@($"{kv.Value.Percent:F0}%")</div>
+                    </div>
                 </div>
             }
         </div>
@@ -202,18 +228,104 @@
 
 @code {
     private List<UploadResult>? _results;
-    private IEnumerable<string>? _savedFiles;
+    private List<string>? _savedFiles = new();
+
+    // Tracks per-file upload status and percent shown to the user
+    private record UploadState(double Percent, string Status);
+    private readonly Dictionary<string, UploadState> _uploadStatus = new(StringComparer.OrdinalIgnoreCase);
+    private int _activeUploads = 0;
 
     private const long MaxFileSize = 1024 * 1024 * 50; // 50 MB
+    private ElementReference _fileInputRef;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private DotNetObjectReference<Home>? _dotNetRef;
+    private readonly Dictionary<string, string> _uploadIds = new(StringComparer.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
         await RefreshFiles();
     }
 
+    private async Task StartJsUpload(ChangeEventArgs e)
+    {
+        // create DotNetObjectReference for callbacks from JS
+        _dotNetRef?.Dispose();
+        _dotNetRef = DotNetObjectReference.Create(this);
+
+        try
+        {
+            await JS.InvokeVoidAsync("startUploadsFromElement", _fileInputRef, _dotNetRef, new { chunkSize = 1024 * 256, concurrency = 3, maxRetries = 3 });
+        }
+        catch (JSException jsEx)
+        {
+            _results ??= new List<UploadResult>();
+            _results.Add(new UploadResult(false, jsEx.Message));
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    [JSInvokable]
+    public Task UploadStarted(string fileName, string uploadId)
+    {
+        _uploadIds[fileName] = uploadId;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CancelUpload(string fileName)
+    {
+        if (_uploadIds.TryGetValue(fileName, out var id))
+        {
+            await JS.InvokeVoidAsync("cancelUpload", id);
+            _uploadIds.Remove(fileName);
+            _uploadStatus[fileName] = new UploadState(0, "Canceled");
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    [JSInvokable]
+    public Task ReportProgress(string fileName, double percent)
+    {
+        _uploadStatus[fileName] = new UploadState(percent, "Uploading...");
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task UploadCompleted(string fileName, string relativePath, bool success, string? error)
+    {
+        if (success)
+        {
+            _savedFiles ??= new List<string>();
+            if (!string.IsNullOrWhiteSpace(relativePath))
+            {
+                var savedName = Path.GetFileName(relativePath.Replace('/', Path.DirectorySeparatorChar));
+                if (!_savedFiles.Contains(savedName, StringComparer.OrdinalIgnoreCase))
+                    _savedFiles.Insert(0, savedName);
+            }
+
+            _results ??= new List<UploadResult>();
+            _results.Add(new UploadResult(true, fileName, relativePath));
+            _uploadStatus[fileName] = new UploadState(100, "Uploaded");
+        }
+        else
+        {
+            _results ??= new List<UploadResult>();
+            _results.Add(new UploadResult(false, error ?? "Upload failed"));
+            _uploadStatus[fileName] = new UploadState(0, error ?? "Upload failed");
+        }
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _dotNetRef?.Dispose();
+    }
+
     private async Task RefreshFiles()
     {
-        _savedFiles = await PdfService.ListFilesAsync();
+        var list = await PdfService.ListFilesAsync();
+        _savedFiles = list?.ToList() ?? new List<string>();
     }
 
     private async Task HandleQuickUpload(InputFileChangeEventArgs e)
@@ -222,33 +334,48 @@
 
         foreach (var file in e.GetMultipleFiles())
         {
+            // mark as uploading and trigger UI update
+            _uploadStatus[file.Name] = new UploadState(0, "Uploading...");
+            _activeUploads++;
+            await InvokeAsync(StateHasChanged);
+
             try
             {
                 await using var stream = file.OpenReadStream(MaxFileSize);
                 var relative = await PdfService.SaveFileAsync(stream, file.Name, file.ContentType);
-                var result = relative != null
-                    ? new UploadResult(true, file.Name, relative)
-                    : new UploadResult(false, $"Save failed for {file.Name}");
 
-                // Ensure UI updates happen on the renderer synchronization context
-                await InvokeAsync(() =>
+                if (relative != null)
                 {
-                    _results.Add(result);
-                    StateHasChanged();
-                });
+                    // Insert immediately into the displayed file list so it appears without a full refresh
+                    var savedName = Path.GetFileName(relative.Replace('/', Path.DirectorySeparatorChar));
+                    _savedFiles ??= new List<string>();
+                    if (!_savedFiles.Contains(savedName, StringComparer.OrdinalIgnoreCase))
+                        _savedFiles.Insert(0, savedName);
+
+                    var successResult = new UploadResult(true, file.Name, relative);
+                    await InvokeAsync(() => _results.Add(successResult));
+                    _uploadStatus[file.Name] = new UploadState(100, "Uploaded");
+                }
+                else
+                {
+                    var failMsg = $"Save failed for {file.Name}";
+                    await InvokeAsync(() => _results.Add(new UploadResult(false, failMsg)));
+                    _uploadStatus[file.Name] = new UploadState(0, "Save failed");
+                }
             }
             catch (Exception ex)
             {
-                await InvokeAsync(() =>
-                {
-                    _results.Add(new UploadResult(false, ex.Message));
-                    StateHasChanged();
-                });
+                // Expose error message to the user for troubleshooting
+                var error = ex.Message;
+                await InvokeAsync(() => _results.Add(new UploadResult(false, error)));
+                _uploadStatus[file.Name] = new UploadState(0, error);
+            }
+            finally
+            {
+                _activeUploads--;
+                await InvokeAsync(StateHasChanged);
             }
         }
-
-        await RefreshFiles();
-        await InvokeAsync(StateHasChanged);
     }
 
     private async Task DeleteFile(string filename)
@@ -256,7 +383,9 @@
         var deleted = await PdfService.DeleteFileAsync(filename);
         if (deleted)
         {
-            await RefreshFiles();
+            // remove from the local list to update UI immediately
+            _savedFiles?.RemoveAll(n => string.Equals(n, filename, StringComparison.OrdinalIgnoreCase));
+            await InvokeAsync(StateHasChanged);
         }
     }
 }

@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Routing
 
 <header class="site-header">
     <div class="site-brand">
@@ -10,18 +11,18 @@
             Big<span>pdf</span>
         </a>
     </div>
-    <nav class="site-nav">
-        <a href="/">Dashboard</a>
-        <a href="/compress">Compress</a>
-        <a href="/merge">Merge</a>
-        <a href="/split">Split</a>
-        <a href="/pdftojpg">PDF to JPG</a>
-        <a href="/ocr">OCR</a>
-        <a href="/office">PDF to Word</a>
-        <a href="/convert">Images to PDF</a>
-        <a href="/watermark">Watermark</a>
-        <a href="/pagenumbers">Page #</a>
-        <a href="/jobs">Jobs</a>
+    <nav class="site-nav" aria-label="Primary navigation">
+        <NavLink href="/" class="nav-link" Match="NavLinkMatch.All">Dashboard</NavLink>
+        <NavLink href="/compress" class="nav-link" Match="NavLinkMatch.Prefix">Compress</NavLink>
+        <NavLink href="/merge" class="nav-link" Match="NavLinkMatch.Prefix">Merge</NavLink>
+        <NavLink href="/split" class="nav-link" Match="NavLinkMatch.Prefix">Split</NavLink>
+        <NavLink href="/pdftojpg" class="nav-link" Match="NavLinkMatch.Prefix">PDF to JPG</NavLink>
+        <NavLink href="/ocr" class="nav-link" Match="NavLinkMatch.Prefix">OCR</NavLink>
+        <NavLink href="/office" class="nav-link" Match="NavLinkMatch.Prefix">PDF to Word</NavLink>
+        <NavLink href="/convert" class="nav-link" Match="NavLinkMatch.Prefix">Images to PDF</NavLink>
+        <NavLink href="/watermark" class="nav-link" Match="NavLinkMatch.Prefix">Watermark</NavLink>
+        <NavLink href="/pagenumbers" class="nav-link" Match="NavLinkMatch.Prefix">Page #</NavLink>
+        <NavLink href="/jobs" class="nav-link" Match="NavLinkMatch.Prefix">Jobs</NavLink>
         <AuthorizeView>
             <Authorized>
                 <span class="nav-user">@context.User.Identity?.Name</span>

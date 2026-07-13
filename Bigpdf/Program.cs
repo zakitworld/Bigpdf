@@ -3,6 +3,7 @@ using Bigpdf.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -94,6 +95,130 @@ app.MapPost("/api/jobs/start", async (HttpContext ctx, IJobService jobService) =
     return Results.Json(job);
 }).RequireAuthorization();
 
+// Create upload id endpoint - server-issued upload IDs for resumable uploads
+app.MapPost("/api/uploads/create", async (HttpContext ctx, IWebHostEnvironment env) =>
+{
+    var body = await ctx.Request.ReadFromJsonAsync<Dictionary<string, string>>();
+    var uploadsRoot = UploadPaths.GetUploadsRoot(env);
+    Directory.CreateDirectory(uploadsRoot);
+
+    var uploadId = Guid.NewGuid().ToString("N");
+    var uploadDir = Path.Combine(uploadsRoot, uploadId);
+    Directory.CreateDirectory(uploadDir);
+
+    return Results.Json(new { uploadId });
+});
+
+// Chunked upload endpoint: accepts raw chunk bodies with headers: X-Upload-Id, X-File-Name, X-Chunk-Index, X-Total-Chunks
+app.MapPost("/api/uploads/chunk", async (HttpContext ctx, IWebHostEnvironment env) =>
+{
+    var req = ctx.Request;
+    var headers = req.Headers;
+
+    if (!headers.TryGetValue("X-File-Name", out var fileNameVals))
+        return Results.BadRequest();
+
+    var fileName = Path.GetFileName(fileNameVals.ToString() ?? "upload");
+    var uploadId = headers.TryGetValue("X-Upload-Id", out var idVal) && !string.IsNullOrWhiteSpace(idVal.ToString())
+        ? idVal.ToString()!
+        : Guid.NewGuid().ToString("N");
+
+    var chunkIndexHeader = headers.TryGetValue("X-Chunk-Index", out var chunkIndexVals) ? chunkIndexVals.ToString() : string.Empty;
+    var totalChunksHeader = headers.TryGetValue("X-Total-Chunks", out var totalChunksVals) ? totalChunksVals.ToString() : string.Empty;
+
+    if (!int.TryParse(chunkIndexHeader, out var chunkIndex)) chunkIndex = 0;
+    if (!int.TryParse(totalChunksHeader, out var totalChunks)) totalChunks = 1;
+
+    var uploadsRoot = UploadPaths.GetUploadsRoot(env);
+    var uploadDir = Path.Combine(uploadsRoot, uploadId);
+    Directory.CreateDirectory(uploadDir);
+
+    var chunkName = $"chunk_{chunkIndex}.part";
+    var chunkPath = Path.Combine(uploadDir, chunkName);
+
+    try
+    {
+        // Write chunk to its own file (supports parallel and resumable uploads)
+        await using (var fs = new FileStream(chunkPath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            await req.Body.CopyToAsync(fs);
+        }
+
+        return Results.Json(new { status = "ok" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.Message);
+    }
+});
+
+// Status endpoint: returns list of uploaded chunk indexes for an uploadId
+app.MapGet("/api/uploads/chunk/status", (string uploadId, IWebHostEnvironment env) =>
+{
+    if (string.IsNullOrWhiteSpace(uploadId)) return Results.BadRequest();
+    var uploadsRoot = UploadPaths.GetUploadsRoot(env);
+    var uploadDir = Path.Combine(uploadsRoot, uploadId);
+    if (!Directory.Exists(uploadDir)) return Results.Json(new { uploadedChunks = Array.Empty<int>() });
+
+    var files = Directory.EnumerateFiles(uploadDir)
+        .Select(Path.GetFileName)
+        .Where(n => !string.IsNullOrWhiteSpace(n) && n.StartsWith("chunk_"))
+        .Select(n => n![6..].Replace(".part", ""))
+        .Select(s => int.TryParse(s, out var i) ? i : -1)
+        .Where(i => i >= 0)
+        .OrderBy(i => i)
+        .ToArray();
+
+    return Results.Json(new { uploadedChunks = files });
+});
+
+// Complete endpoint: assembles chunks into final file and returns public path
+app.MapPost("/api/uploads/chunk/complete", async (HttpContext ctx, IWebHostEnvironment env) =>
+{
+    var q = ctx.Request.Query;
+    var uploadId = q["uploadId"].ToString();
+    var fileName = Path.GetFileName(q["fileName"].ToString() ?? "upload");
+    if (!int.TryParse(q["totalChunks"], out var totalChunks)) totalChunks = 1;
+
+    if (string.IsNullOrWhiteSpace(uploadId) || string.IsNullOrWhiteSpace(fileName))
+        return Results.BadRequest();
+
+    var uploadsRoot = UploadPaths.GetUploadsRoot(env);
+    var uploadDir = Path.Combine(uploadsRoot, uploadId);
+    if (!Directory.Exists(uploadDir)) return Results.Problem("Upload not found");
+
+    try
+    {
+        var finalName = $"{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}_{fileName}";
+        var finalPath = Path.Combine(uploadsRoot, finalName);
+
+        await using (var finalFs = new FileStream(finalPath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            for (int i = 0; i < totalChunks; i++)
+            {
+                var chunkPath = Path.Combine(uploadDir, $"chunk_{i}.part");
+                if (!File.Exists(chunkPath)) throw new FileNotFoundException($"Missing chunk {i}");
+
+                await using (var cs = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    await cs.CopyToAsync(finalFs);
+                }
+            }
+        }
+
+        // delete chunk files and directory
+        foreach (var f in Directory.EnumerateFiles(uploadDir)) File.Delete(f);
+        Directory.Delete(uploadDir);
+
+        var publicPath = Path.Combine("uploads", finalName).Replace('\\', '/');
+        return Results.Json(new { path = $"/uploads/{finalName}" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.Message);
+    }
+}).RequireAuthorization();
+
 app.MapGet("/api/jobs/{id}", (string id, IJobService jobService) =>
 {
     var job = jobService.GetJob(id);
@@ -114,7 +239,7 @@ app.MapGet("/uploads/{**filePath}", (string filePath, IWebHostEnvironment env) =
         return Results.NotFound();
 
     return Results.File(fullPath);
-}).RequireAuthorization();
+});
 
 app.MapGet("/api/uploads/list", (string path, IWebHostEnvironment env) =>
 {
@@ -128,8 +253,9 @@ app.MapGet("/api/uploads/list", (string path, IWebHostEnvironment env) =>
         .ToList();
 
     return Results.Json(files);
-}).RequireAuthorization();
+});
 
+app.UseStaticFiles();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

@@ -45,14 +45,18 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
+    app.UseHttpsRedirection();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseAntiforgery();
+
+// Serve static files (js/upload.js, etc.) early so they're available before route matching
+app.UseStaticFiles();
+app.MapStaticAssets();
 
 app.MapPost("/auth/login", async (HttpContext ctx, IAdminAuthSettings authSettings) =>
 {
@@ -107,7 +111,7 @@ app.MapPost("/api/uploads/create", async (HttpContext ctx, IWebHostEnvironment e
     Directory.CreateDirectory(uploadDir);
 
     return Results.Json(new { uploadId });
-});
+}).RequireAuthorization();
 
 // Chunked upload endpoint: accepts raw chunk bodies with headers: X-Upload-Id, X-File-Name, X-Chunk-Index, X-Total-Chunks
 app.MapPost("/api/uploads/chunk", async (HttpContext ctx, IWebHostEnvironment env) =>
@@ -150,7 +154,7 @@ app.MapPost("/api/uploads/chunk", async (HttpContext ctx, IWebHostEnvironment en
     {
         return Results.Problem(ex.Message);
     }
-});
+}).RequireAuthorization();
 
 // Status endpoint: returns list of uploaded chunk indexes for an uploadId
 app.MapGet("/api/uploads/chunk/status", (string uploadId, IWebHostEnvironment env) =>
@@ -255,8 +259,6 @@ app.MapGet("/api/uploads/list", (string path, IWebHostEnvironment env) =>
     return Results.Json(files);
 });
 
-app.UseStaticFiles();
-app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

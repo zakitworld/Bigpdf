@@ -34,9 +34,17 @@
 
         @if (_job.Status == JobStatus.Running || _job.Status == JobStatus.Pending)
         {
-            <div style="display: flex; align-items: center; gap: 0.75rem;">
-                <div class="spinner" style="width: 1.5rem; height: 1.5rem; border-width: 3px;"></div>
-                <span class="job-progress" style="font-size: 0.9rem; font-weight: 500;">Performing operation on document(s)...</span>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div class="spinner" style="width: 1.5rem; height: 1.5rem; border-width: 3px;"></div>
+                    <span class="job-progress" style="font-size: 0.9rem; font-weight: 600;">
+                        @(_job.Message ?? "Performing operation on document(s)...")
+                    </span>
+                </div>
+                <div class="progress-container" style="max-width: 360px;">
+                    <div class="progress-fill" style="@($"width:{Math.Clamp(_job.ProgressPercent ?? 10, 5, 95)}%")"></div>
+                </div>
+                <span class="hint">Elapsed: @FormatElapsed(_job.StartedAt ?? _job.CreatedAt). Long conversions fail automatically instead of running forever.</span>
             </div>
         }
         else if (_job.Status == JobStatus.Completed)
@@ -135,4 +143,13 @@
     }
 
     public void Dispose() => StopPolling();
+
+    private static string FormatElapsed(DateTime startedAt)
+    {
+        var elapsed = DateTime.UtcNow - startedAt;
+        if (elapsed.TotalMinutes >= 1)
+            return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds}s";
+
+        return $"{Math.Max(0, elapsed.Seconds)}s";
+    }
 }

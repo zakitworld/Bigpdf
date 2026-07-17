@@ -1,8 +1,9 @@
 @page "/split"
-@using Bigpdf.Models
-@using Bigpdf.Services
-@using Bigpdf.Components.Shared
+@using global::Bigpdf.Models
+@using global::Bigpdf.Services
+@using global::Bigpdf.Components.Shared
 @inject IJobService JobService
+@rendermode InteractiveServer
 
 <Workspace Title="Split PDF" 
            Subtitle="Extract specific pages or split pages into separate documents." 

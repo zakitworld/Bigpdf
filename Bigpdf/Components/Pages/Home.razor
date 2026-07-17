@@ -1,130 +1,40 @@
 @page "/"
 @using Microsoft.AspNetCore.Components.Forms
-@using Bigpdf.Services
-@using Bigpdf.Models
+@using global::Bigpdf.Services
+@using global::Bigpdf.Models
 @using System.IO
 @implements IDisposable
 @inject IPdfService PdfService
 @inject NavigationManager NavigationManager
+@rendermode InteractiveServer
 
-<h2 class="page-title">Supercharge Your PDF Workflows</h2>
-<p class="page-subtitle">Premium, industry-standard tools to merge, split, compress, convert, and OCR documents instantly.</p>
+<section class="tool-catalog">
+    <h1 class="sr-only">Bigpdf PDF tools</h1>
 
-<div class="dashboard-grid">
-    <!-- Compress -->
-    <a class="tool-card" href="/compress" style="--tool-gradient: var(--grad-compress);">
-        <div class="tool-icon-wrapper">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 14h16M4 10h16M12 3v7M12 21v-7"/>
-            </svg>
-        </div>
-        <h4>Compress PDF</h4>
-        <p>Reduce file size dramatically while preserving maximum quality and formatting.</p>
-    </a>
-
-    <!-- Merge -->
-    <a class="tool-card" href="/merge" style="--tool-gradient: var(--grad-merge);">
-        <div class="tool-icon-wrapper">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 5v14M5 12h14"/>
-            </svg>
-        </div>
-        <h4>Merge PDF</h4>
-        <p>Combine multiple PDF files into a single, cohesive document in seconds.</p>
-    </a>
-
-    <!-- Split -->
-    <a class="tool-card" href="/split" style="--tool-gradient: var(--grad-split);">
-        <div class="tool-icon-wrapper">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M16 3H1v18h15zM23 7v10M19 11h4"/>
-            </svg>
-        </div>
-        <h4>Split PDF</h4>
-        <p>Extract specific page ranges or split every page into separate PDF files.</p>
-    </a>
-
-    <!-- PDF to JPG -->
-    <a class="tool-card" href="/pdftojpg" style="--tool-gradient: var(--grad-jpg);">
-        <div class="tool-icon-wrapper">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                <circle cx="12" cy="13" r="4"/>
-            </svg>
-        </div>
-        <h4>PDF to JPG</h4>
-        <p>Extract images or render pages of a PDF into high-quality JPEG images.</p>
-    </a>
-
-    <!-- OCR -->
-    <a class="tool-card" href="/ocr" style="--tool-gradient: var(--grad-ocr);">
-        <div class="tool-icon-wrapper">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="8" y1="13" x2="16" y2="13"/>
-                <line x1="8" y1="17" x2="16" y2="17"/>
-                <line x1="10" y1="9" x2="9" y2="9"/>
-            </svg>
-        </div>
-        <h4>OCR PDF</h4>
-        <p>Analyze scanned PDF documents and extract editable text using Tesseract OCR.</p>
-    </a>
-
-    <!-- PDF to Word -->
-    <a class="tool-card" href="/office" style="--tool-gradient: var(--grad-word);">
-        <div class="tool-icon-wrapper">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-                <polyline points="10 9 9 9 8 9"/>
-            </svg>
-        </div>
-        <h4>PDF to Word</h4>
-        <p>Convert your PDF files to editable DOCX documents with layout precision.</p>
-    </a>
-
-    <!-- Images to PDF -->
-    <a class="tool-card" href="/convert" style="--tool-gradient: var(--grad-img);">
-        <div class="tool-icon-wrapper">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-            </svg>
-        </div>
-        <h4>Images to PDF</h4>
-        <p>Convert JPG, PNG, and TIFF images into clean, formatted PDF files.</p>
-    </a>
-
-    <!-- Watermark -->
-    <a class="tool-card" href="/watermark" style="--tool-gradient: var(--grad-watermark);">
-        <div class="tool-icon-wrapper">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-        </div>
-        <h4>Watermark PDF</h4>
-        <p>Add text stamps or custom watermarks overlaying all pages of your PDF.</p>
-    </a>
-
-    <!-- Page Numbers -->
-    <a class="tool-card" href="/pagenumbers" style="--tool-gradient: var(--grad-pagenum);">
-        <div class="tool-icon-wrapper">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-            </svg>
-        </div>
-        <h4>Page Numbers</h4>
-        <p>Add page counters or customize alignment and positioning of page numbers.</p>
-    </a>
-</div>
+    <div class="catalog-grid">
+        @foreach (var tool in _tools)
+        {
+            <a class="catalog-card @(tool.Available ? "" : "is-coming-soon")"
+               href="@(tool.Available ? tool.Href : "#")"
+               aria-disabled="@(!tool.Available)"
+               style="--tool-color: @tool.Color;">
+                <span class="catalog-icon">@tool.Icon</span>
+                <span class="catalog-copy">
+                    <strong>@tool.Title</strong>
+                    <span>@tool.Description</span>
+                </span>
+                <span class="catalog-arrow" aria-hidden="true">&rsaquo;</span>
+                @if (!tool.Available)
+                {
+                    <span class="coming-soon">Soon</span>
+                }
+            </a>
+        }
+    </div>
+</section>
 
 <!-- Storage / Recent Files Section -->
-<div class="storage-section">
+<section class="storage-section">
     <div class="storage-title">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--primary);">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -224,9 +134,43 @@
             <span>No files uploaded yet. Add files to get started.</span>
         </div>
     }
-</div>
+</section>
 
 @code {
+    private sealed record ToolCard(string Title, string Description, string Icon, string Color, string Href, bool Available = true);
+
+    private readonly IReadOnlyList<ToolCard> _tools = new List<ToolCard>
+    {
+        new("Compress PDF", "Reduce the size of your PDF without losing quality", "PDF", "#ff2f3d", "/compress"),
+        new("PDF Converter", "Convert Office files to and from PDF", "PDF", "#ff2f3d", "/office"),
+        new("PDF OCR", "Make text in scanned documents searchable", "OCR", "#ff2f3d", "/ocr"),
+        new("PPT to PDF", "Convert PowerPoint presentations to PDF documents", "P", "#ff8500", "#", false),
+        new("PDF to PPT", "Convert PDFs to editable PowerPoint presentations", "P", "#ff8500", "#", false),
+        new("JPG to PDF", "Transform JPG, PNG, BMP, GIF, and TIFF images to PDF", "IMG", "#ffb300", "/convert"),
+        new("PDF to JPG", "Extract images from your PDF or save each page as an image", "IMG", "#ffb300", "/pdftojpg"),
+        new("Excel to PDF", "Convert Excel spreadsheets to PDF documents", "X", "#04c853", "#", false),
+        new("PDF to Excel", "Convert PDFs to editable Excel spreadsheets", "X", "#04c853", "#", false),
+        new("Word to PDF", "Convert Word documents to PDF files", "W", "#3996f3", "#", false),
+        new("PDF to Word", "Convert PDFs to editable Word documents", "W", "#3996f3", "/office"),
+        new("Edit PDF", "Add text, shapes, images and annotations to your PDF", "T", "#14c3c7", "#", false),
+        new("PDF Annotator", "Write, draw, and highlight on your PDF", "PEN", "#14c3c7", "#", false),
+        new("PDF Form Filler", "Fill out PDF forms online", "FORM", "#14c3c7", "#", false),
+        new("TXT to PDF", "Convert TXT to PDF online", "TXT", "#3996f3", "#", false),
+        new("RTF to PDF", "Convert RTF to PDF with ease", "RTF", "#3996f3", "#", false),
+        new("ODT to PDF", "Convert ODT to PDF online", "ODT", "#3996f3", "#", false),
+        new("HTML to PDF", "Convert HTML to PDF online", "HTML", "#3996f3", "#", false),
+        new("Watermark PDF", "Add a watermark to your PDFs", "WM", "#14c3c7", "/watermark"),
+        new("Number Pages", "Insert page numbers in PDF with ease", "123", "#14c3c7", "/pagenumbers"),
+        new("Merge PDF", "Combine multiple PDFs into one unified document", "ADD", "#7c5cf4", "/merge"),
+        new("Split PDF", "Extract pages from your PDF or save each page as a separate PDF", "CUT", "#7c5cf4", "/split"),
+        new("Delete PDF Pages", "Remove one or multiple pages from your PDF", "DEL", "#7c5cf4", "#", false),
+        new("Extract PDF Pages", "Pick only the pages you need from a PDF", "EXT", "#7c5cf4", "/split"),
+        new("Rotate PDF", "Rotate one or all pages in your PDF", "ROT", "#7c5cf4", "#", false),
+        new("Protect PDF", "Add a password and encrypt your PDF file", "LOCK", "#ff5277", "#", false),
+        new("Unlock PDF", "Remove password, encryption, and permission from your PDF", "OPEN", "#ff5277", "#", false),
+        new("PDF Reader", "Display, print, and share PDFs online", "READ", "#14c3c7", "#", false)
+    };
+
     private List<UploadResult>? _results;
     private List<string>? _savedFiles = new();
 

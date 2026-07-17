@@ -1,8 +1,9 @@
 @page "/pagenumbers"
-@using Bigpdf.Models
-@using Bigpdf.Services
-@using Bigpdf.Components.Shared
+@using global::Bigpdf.Models
+@using global::Bigpdf.Services
+@using global::Bigpdf.Components.Shared
 @inject IPdfProcessor PdfProcessor
+@rendermode InteractiveServer
 
 <Workspace Title="Add Page Numbers" 
            Subtitle="Number your PDF pages instantly with clean bottom-center pagination formats." 

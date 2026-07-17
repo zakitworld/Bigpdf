@@ -1,0 +1,76 @@
+@page "/admin/tools"
+@using System.Text.Json
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
+@inject NavigationManager Nav
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<h3>Tool Paths</h3>
+<p>Configure external tool executable paths used by the application. Values here override environment variables and appsettings for convenience.</p>
+
+<div style="max-width:700px;">
+    <div class="form-group">
+        <label>LibreOffice (soffice) path</label>
+        <input class="form-control" @bind="LibreOfficePath" />
+        <small class="hint">Example: C:\\Program Files\\LibreOffice\\program\\soffice.exe</small>
+    </div>
+    <div class="form-group">
+        <label>Ghostscript (gs) path</label>
+        <input class="form-control" @bind="GhostscriptPath" />
+        <small class="hint">Example: C:\\Program Files\\gs\\gs9.xx\\bin\\gswin64c.exe</small>
+    </div>
+
+    <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+        <button class="btn btn-primary" @onclick="Save">Save</button>
+        <button class="btn btn-secondary" @onclick="Reset">Reset</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <div style="margin-top:1rem;" class="alert alert-success">@Message</div>
+    }
+</div>
+
+@code {
+    private string? LibreOfficePath { get; set; }
+    private string? GhostscriptPath { get; set; }
+    private string? Message { get; set; }
+
+    protected override void OnInitialized()
+    {
+        // Load existing toolpaths.json if present
+        var file = Path.Combine(Env.ContentRootPath, "toolpaths.json");
+        if (File.Exists(file))
+        {
+            try
+            {
+                var json = File.ReadAllText(file);
+                var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("LibreOfficePath", out var l)) LibreOfficePath = l.GetString();
+                if (doc.RootElement.TryGetProperty("GhostscriptPath", out var g)) GhostscriptPath = g.GetString();
+            }
+            catch { }
+        }
+    }
+
+    private void Save()
+    {
+        var file = Path.Combine(Env.ContentRootPath, "toolpaths.json");
+        var obj = new Dictionary<string, string?>
+        {
+            ["LibreOfficePath"] = string.IsNullOrWhiteSpace(LibreOfficePath) ? null : LibreOfficePath,
+            ["GhostscriptPath"] = string.IsNullOrWhiteSpace(GhostscriptPath) ? null : GhostscriptPath,
+        };
+        var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(file, json);
+        Message = "Saved";
+    }
+
+    private void Reset()
+    {
+        LibreOfficePath = null;
+        GhostscriptPath = null;
+        var file = Path.Combine(Env.ContentRootPath, "toolpaths.json");
+        if (File.Exists(file)) File.Delete(file);
+        Message = "Reset to defaults";
+    }
+}

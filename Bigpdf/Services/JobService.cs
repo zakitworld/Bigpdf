@@ -34,10 +34,17 @@ namespace Bigpdf.Services
             _queue.QueueBackgroundWorkItem(async ct =>
             {
                 job.Status = JobStatus.Running;
+                job.StartedAt = DateTime.UtcNow;
+                job.ProgressPercent = 5;
+                job.Message = $"Starting {GetJobLabel(request.Type)}...";
                 _store.Update(job);
 
                 try
                 {
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    timeoutCts.CancelAfter(GetJobTimeout(request.Type));
+                    var jobToken = timeoutCts.Token;
+
                     var outputFolder = request.OutputName ?? "converted-pages";
 
                     PdfOperationResult result = request.Type switch
@@ -45,34 +52,41 @@ namespace Bigpdf.Services
                         JobType.PdfToJpg => await _processor.ConvertPdfToJpgAsync(
                             request.InputRelativePath!,
                             outputFolder,
-                            ct),
+                            jobToken),
                         JobType.CompressPdf => await _processor.CompressPdfAsync(
                             request.InputRelativePath!,
                             request.OutputName ?? "compressed.pdf",
-                            ct),
+                            jobToken),
                         JobType.OcrPdf => await _processor.OcrPdfAsync(
                             request.InputRelativePath!,
                             request.OutputName ?? "ocr-output.txt",
-                            ct),
+                            jobToken),
                         JobType.PdfToWord => await _processor.ConvertPdfToWordAsync(
                             request.InputRelativePath!,
                             request.OutputName ?? "converted.docx",
-                            ct),
+                            jobToken),
                         JobType.Merge => await _processor.MergeAsync(
                             (request.InputRelativePath ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                             request.OutputName ?? "merged.pdf",
-                            ct),
-                        JobType.Split => await RunSplitAsync(request, ct),
+                            jobToken),
+                        JobType.Split => await RunSplitAsync(request, jobToken),
                         JobType.AddPageNumbers => await _processor.AddPageNumbersAsync(
                             request.InputRelativePath!,
                             request.OutputName ?? "numbered.pdf",
-                            ct),
+                            jobToken),
                         _ => new PdfOperationResult(false, $"Unsupported job type: {request.Type}")
                     };
 
                     job.Status = result.Success ? JobStatus.Completed : JobStatus.Failed;
                     job.Message = result.Message;
                     job.ResultPath = result.OutputRelativePath;
+                    job.ProgressPercent = result.Success ? 100 : 0;
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    job.Status = JobStatus.Failed;
+                    job.Message = $"{GetJobLabel(request.Type)} timed out. The converter may be missing, blocked, or the file may be too large. Try a smaller file or check the server tool configuration.";
+                    job.ProgressPercent = 0;
                 }
                 catch (Exception ex)
                 {
@@ -109,5 +123,26 @@ namespace Bigpdf.Services
                 request.Parameters?.TryGetValue("output", out var output) == true ? output : "split.pdf",
                 cancellationToken);
         }
+
+        private static TimeSpan GetJobTimeout(JobType type) => type switch
+        {
+            JobType.PdfToWord => TimeSpan.FromMinutes(3),
+            JobType.OcrPdf => TimeSpan.FromMinutes(4),
+            JobType.PdfToJpg => TimeSpan.FromMinutes(3),
+            JobType.CompressPdf => TimeSpan.FromMinutes(3),
+            _ => TimeSpan.FromMinutes(2)
+        };
+
+        private static string GetJobLabel(JobType type) => type switch
+        {
+            JobType.PdfToJpg => "PDF to JPG conversion",
+            JobType.CompressPdf => "PDF compression",
+            JobType.OcrPdf => "OCR",
+            JobType.PdfToWord => "PDF to Word conversion",
+            JobType.Merge => "PDF merge",
+            JobType.Split => "PDF split",
+            JobType.AddPageNumbers => "page numbering",
+            _ => "job"
+        };
     }
 }

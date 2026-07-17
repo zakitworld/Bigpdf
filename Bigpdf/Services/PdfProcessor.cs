@@ -12,16 +12,59 @@ using PdfSharpCore.Drawing;
 
 namespace Bigpdf.Services
 {
+    using Microsoft.Extensions.Configuration;
+
     public class PdfProcessor : IPdfProcessor
     {
         private readonly string _uploadsFolder;
         private readonly IWebHostEnvironment _env;
+        private readonly IConfiguration _configuration;
+        private sealed record ProcessRunResult(int ExitCode, string StandardOutput, string StandardError, bool TimedOut);
 
-        public PdfProcessor(IWebHostEnvironment env)
+        public PdfProcessor(IWebHostEnvironment env, IConfiguration configuration)
         {
             _env = env;
+            _configuration = configuration;
             _uploadsFolder = UploadPaths.GetUploadsRoot(env);
             if (!Directory.Exists(_uploadsFolder)) Directory.CreateDirectory(_uploadsFolder);
+        }
+
+        private string? GetConfiguredToolPath(string key)
+        {
+            // 1) Environment variable
+            try
+            {
+                var fromEnv = Environment.GetEnvironmentVariable(key.ToUpperInvariant());
+                if (!string.IsNullOrWhiteSpace(fromEnv)) return fromEnv;
+            }
+            catch { }
+
+            // 2) appsettings (Tools:Key)
+            try
+            {
+                var cfg = _configuration?.GetSection("Tools")?[key];
+                if (!string.IsNullOrWhiteSpace(cfg)) return cfg;
+            }
+            catch { }
+
+            // 3) local toolpaths.json in content root
+            try
+            {
+                var file = Path.Combine(_env.ContentRootPath, "toolpaths.json");
+                if (File.Exists(file))
+                {
+                    var json = File.ReadAllText(file);
+                    var doc = System.Text.Json.JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty(key, out var val) && val.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var s = val.GetString();
+                        if (!string.IsNullOrWhiteSpace(s)) return s;
+                    }
+                }
+            }
+            catch { }
+
+            return null;
         }
 
         private string AbsolutePath(string relative)
@@ -33,8 +76,66 @@ namespace Bigpdf.Services
 
         private string SaveOutputPath(string fileName)
         {
-            var safe = Path.GetFileName(fileName);
+            var safe = Path.GetFileName(string.IsNullOrWhiteSpace(fileName) ? "output.pdf" : fileName);
             return Path.Combine(_uploadsFolder, $"{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}_{safe}");
+        }
+
+        private async Task<ProcessRunResult> RunProcessAsync(
+            string fileName,
+            string arguments,
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+        {
+            var startInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+
+            using var process = System.Diagnostics.Process.Start(startInfo);
+            if (process is null)
+                return new ProcessRunResult(-1, string.Empty, $"Failed to start {fileName}", false);
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            var waitTask = process.WaitForExitAsync(cancellationToken);
+            var timeoutTask = Task.Delay(timeout, cancellationToken);
+
+            var completed = await Task.WhenAny(waitTask, timeoutTask);
+            if (completed == timeoutTask)
+            {
+                TryKillProcess(process);
+                var stdout = await SafeReadAsync(stdoutTask);
+                var stderr = await SafeReadAsync(stderrTask);
+                return new ProcessRunResult(-1, stdout, stderr, true);
+            }
+
+            await waitTask;
+            return new ProcessRunResult(
+                process.ExitCode,
+                await SafeReadAsync(stdoutTask),
+                await SafeReadAsync(stderrTask),
+                false);
+        }
+
+        private static async Task<string> SafeReadAsync(Task<string> task)
+        {
+            try { return await task; }
+            catch { return string.Empty; }
+        }
+
+        private static void TryKillProcess(System.Diagnostics.Process process)
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch { }
         }
 
         public async Task<PdfOperationResult> OcrPdfAsync(string inputRelativePath, string outputTextFileRelative, CancellationToken cancellationToken = default)
@@ -55,34 +156,24 @@ namespace Bigpdf.Services
 
                 // Find tesseract
                 string[] tessCandidates = { "tesseract", "tesseract.exe" };
-                string? tessExe = null;
-                foreach (var t in tessCandidates)
+                string? tessExe = GetConfiguredToolPath("TesseractPath");
+                if (string.IsNullOrWhiteSpace(tessExe))
                 {
-                    try
+                    foreach (var t in tessCandidates)
                     {
-                        var psi = new System.Diagnostics.ProcessStartInfo
+                        try
                         {
-                            FileName = t,
-                            Arguments = "--version",
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true,
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                        };
-                        using var p = System.Diagnostics.Process.Start(psi);
-                        if (p != null)
-                        {
-                            await p.WaitForExitAsync(cancellationToken);
-                            if (p.ExitCode == 0)
+                            var probe = await RunProcessAsync(t, "--version", TimeSpan.FromSeconds(10), cancellationToken);
+                            if (probe.ExitCode == 0)
                             {
                                 tessExe = t;
                                 break;
                             }
                         }
-                    }
-                    catch
-                    {
-                        // ignore and try next candidate
+                        catch
+                        {
+                            // ignore and try next candidate
+                        }
                     }
                 }
 
@@ -107,25 +198,12 @@ namespace Bigpdf.Services
                 foreach (var img in images)
                 {
                     var outBase = Path.Combine(Path.GetDirectoryName(img) ?? tempAbs, Path.GetFileNameWithoutExtension(img));
-                    var psi = new System.Diagnostics.ProcessStartInfo
+                    var run = await RunProcessAsync(tessExe, $"\"{img}\" \"{outBase}\" -l eng", TimeSpan.FromSeconds(45), cancellationToken);
+                    if (run.TimedOut)
                     {
-                        FileName = tessExe,
-                        Arguments = $"\"{img}\" \"{outBase}\" -l eng",
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                    };
-                    using var p = System.Diagnostics.Process.Start(psi);
-                    if (p == null)
-                    {
-                        await writer.WriteLineAsync($"[OCR ERROR] Failed to start tesseract for image {Path.GetFileName(img)}");
+                        await writer.WriteLineAsync($"[OCR ERROR] Tesseract timed out for image {Path.GetFileName(img)}");
                         continue;
                     }
-
-                    var so = await p.StandardOutput.ReadToEndAsync(cancellationToken);
-                    var se = await p.StandardError.ReadToEndAsync(cancellationToken);
-                    await p.WaitForExitAsync(cancellationToken);
 
                     var txtFile = outBase + ".txt";
                     if (File.Exists(txtFile))
@@ -136,7 +214,7 @@ namespace Bigpdf.Services
                     else
                     {
                         // If no text file, attempt to read stdout
-                        if (!string.IsNullOrWhiteSpace(so)) await writer.WriteLineAsync(so);
+                        if (!string.IsNullOrWhiteSpace(run.StandardOutput)) await writer.WriteLineAsync(run.StandardOutput);
                     }
                 }
 
@@ -270,42 +348,29 @@ namespace Bigpdf.Services
                 var outputDir = AbsolutePath(outputRel);
                 Directory.CreateDirectory(outputDir);
 
-                // Try to find Ghostscript executable
-                string[] candidates = { "gs", "gswin64c.exe", "gswin32c.exe" };
-                string? gsExe = null;
-                foreach (var c in candidates)
+                // Resolve Ghostscript executable: configured path (Tools:GhostscriptPath or GHOSTSCRIPT_PATH), then PATH candidates
+                string? gsExe = GetConfiguredToolPath("GhostscriptPath");
+                if (string.IsNullOrWhiteSpace(gsExe))
                 {
-                    try
+                    string[] candidates = { "gs", "gswin64c.exe", "gswin32c.exe" };
+                    foreach (var c in candidates)
                     {
-                        var psi = new System.Diagnostics.ProcessStartInfo
+                        try
                         {
-                            FileName = c,
-                            Arguments = "--version",
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true,
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                        };
-                        using var p = System.Diagnostics.Process.Start(psi);
-                        if (p != null)
-                        {
-                            await p.WaitForExitAsync(cancellationToken);
-                            if (p.ExitCode == 0)
+                            var probe = await RunProcessAsync(c, "--version", TimeSpan.FromSeconds(10), cancellationToken);
+                            if (probe.ExitCode == 0)
                             {
                                 gsExe = c;
                                 break;
                             }
                         }
-                    }
-                    catch
-                    {
-                        // ignore and try next candidate
+                        catch { }
                     }
                 }
 
-                if (gsExe == null)
+                if (string.IsNullOrWhiteSpace(gsExe))
                 {
-                    return new PdfOperationResult(false, "Ghostscript not found on the server. Install Ghostscript and ensure 'gs' or 'gswin64c.exe' is on PATH. See https://www.ghostscript.com/");
+                    return new PdfOperationResult(false, "Ghostscript not found on the server. Install Ghostscript and ensure 'gs' or 'gswin64c.exe' is on PATH, or set the Tools:GhostscriptPath configuration or GHOSTSCRIPT_PATH environment variable to the gs executable path. See https://www.ghostscript.com/");
                 }
 
                 // Build Ghostscript arguments to render each page as JPEG
@@ -313,26 +378,14 @@ namespace Bigpdf.Services
                 var outputPattern = Path.Combine(outputDir, "page-%03d.jpg");
                 var args = $"-dNOPAUSE -dBATCH -sDEVICE=jpeg -r150 -dTextAlphaBits=4 -dGraphicsAlphaBits=4 -sOutputFile=\"{outputPattern}\" \"{abs}\"";
 
-                var startInfo = new System.Diagnostics.ProcessStartInfo
+                var run = await RunProcessAsync(gsExe, args, TimeSpan.FromMinutes(2), cancellationToken);
+
+                if (run.TimedOut)
+                    return new PdfOperationResult(false, "Ghostscript PDF to JPG conversion timed out after 2 minutes.");
+
+                if (run.ExitCode != 0)
                 {
-                    FileName = gsExe,
-                    Arguments = args,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
-
-                using var proc = System.Diagnostics.Process.Start(startInfo);
-                if (proc == null) return new PdfOperationResult(false, "Failed to start Ghostscript process");
-
-                var stdOut = await proc.StandardOutput.ReadToEndAsync(cancellationToken);
-                var stdErr = await proc.StandardError.ReadToEndAsync(cancellationToken);
-                await proc.WaitForExitAsync(cancellationToken);
-
-                if (proc.ExitCode != 0)
-                {
-                    return new PdfOperationResult(false, $"Ghostscript failed: {proc.ExitCode}. {stdErr}");
+                    return new PdfOperationResult(false, $"Ghostscript failed: {run.ExitCode}. {run.StandardError}");
                 }
 
                 // Enumerate produced files
@@ -416,157 +469,139 @@ namespace Bigpdf.Services
             }
         }
 
-        public Task<PdfOperationResult> CompressPdfAsync(string inputRelativePath, string outputFileName, CancellationToken cancellationToken = default)
-        {
-            try
-            {
-                var abs = AbsolutePath(inputRelativePath);
-                if (!File.Exists(abs)) return Task.FromResult(new PdfOperationResult(false, "Input file not found"));
-
-                // Find Ghostscript
-                string[] candidates = { "gs", "gswin64c.exe", "gswin32c.exe" };
-                string? gsExe = null;
-                foreach (var c in candidates)
-                {
-                    try
-                    {
-                        var psi = new System.Diagnostics.ProcessStartInfo
-                        {
-                            FileName = c,
-                            Arguments = "--version",
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true,
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                        };
-                        using var p = System.Diagnostics.Process.Start(psi);
-                        if (p != null)
-                        {
-                            p.WaitForExit();
-                            if (p.ExitCode == 0)
-                            {
-                                gsExe = c;
-                                break;
-                            }
-                        }
-                    }
-                    catch { }
-                }
-
-                if (gsExe == null)
-                {
-                    return Task.FromResult(new PdfOperationResult(false, "Ghostscript not found on the server. Install Ghostscript and ensure 'gs' or 'gswin64c.exe' is on PATH."));
-                }
-
-                var outPath = SaveOutputPath(outputFileName ?? (Path.GetFileNameWithoutExtension(abs) + "-compressed.pdf"));
-                var args = $"-dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/ebook -sOutputFile=\"{outPath}\" \"{abs}\"";
-
-                var startInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = gsExe,
-                    Arguments = args,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
-
-                using var proc = System.Diagnostics.Process.Start(startInfo);
-                if (proc == null) return Task.FromResult(new PdfOperationResult(false, "Failed to start Ghostscript process"));
-                var stdOut = proc.StandardOutput.ReadToEnd();
-                var stdErr = proc.StandardError.ReadToEnd();
-                proc.WaitForExit();
-
-                if (proc.ExitCode != 0) return Task.FromResult(new PdfOperationResult(false, $"Ghostscript compression failed: {stdErr}"));
-
-                var relative = Path.Combine("uploads", Path.GetFileName(outPath)).Replace('\\', '/');
-                return Task.FromResult(new PdfOperationResult(true, "Compression complete", relative));
-            }
-            catch (Exception ex)
-            {
-                return Task.FromResult(new PdfOperationResult(false, ex.Message));
-            }
-        }
-
-        public async Task<PdfOperationResult> ConvertPdfToWordAsync(string inputRelativePath, string outputRelativePath, CancellationToken cancellationToken = default)
+        public async Task<PdfOperationResult> CompressPdfAsync(string inputRelativePath, string outputFileName, CancellationToken cancellationToken = default)
         {
             try
             {
                 var abs = AbsolutePath(inputRelativePath);
                 if (!File.Exists(abs)) return new PdfOperationResult(false, "Input file not found");
 
-                // Find LibreOffice / soffice
-                string[] candidates = { "soffice", "libreoffice", "soffice.exe" };
-                string? soffice = null;
-                foreach (var c in candidates)
+                string? gsExe = GetConfiguredToolPath("GhostscriptPath");
+                if (string.IsNullOrWhiteSpace(gsExe))
                 {
-                    try
+                    string[] candidates = { "gs", "gswin64c.exe", "gswin32c.exe" };
+                    foreach (var c in candidates)
                     {
-                        var psi = new System.Diagnostics.ProcessStartInfo
+                        try
                         {
-                            FileName = c,
-                            Arguments = "--version",
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true,
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                        };
-                        using var p = System.Diagnostics.Process.Start(psi);
-                        if (p != null)
-                        {
-                            await p.WaitForExitAsync(cancellationToken);
-                            if (p.ExitCode == 0)
+                            var probe = await RunProcessAsync(c, "--version", TimeSpan.FromSeconds(10), cancellationToken);
+                            if (probe.ExitCode == 0)
                             {
-                                soffice = c;
+                                gsExe = c;
                                 break;
                             }
                         }
+                        catch { }
                     }
-                    catch { }
                 }
 
-                if (soffice == null)
+                if (gsExe == null)
                 {
-                    return new PdfOperationResult(false, "LibreOffice (soffice) not found. Install LibreOffice and ensure 'soffice' is on PATH.");
+                    return new PdfOperationResult(false, "Ghostscript not found on the server. Install Ghostscript and ensure 'gs' or 'gswin64c.exe' is on PATH, or set Tools:GhostscriptPath.");
                 }
 
-                var outDirRel = outputRelativePath;
-                if (string.IsNullOrWhiteSpace(outDirRel))
-                {
-                    outDirRel = Path.Combine("uploads", "office-out").Replace('\\', '/');
-                }
-                var outDirAbs = AbsolutePath(outDirRel);
-                Directory.CreateDirectory(outDirAbs);
+                var outPath = SaveOutputPath(outputFileName ?? (Path.GetFileNameWithoutExtension(abs) + "-compressed.pdf"));
+                var args = $"-dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/ebook -sOutputFile=\"{outPath}\" \"{abs}\"";
 
-                var startInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = soffice,
-                    Arguments = $"--headless --convert-to docx --outdir \"{outDirAbs}\" \"{abs}\"",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
+                var run = await RunProcessAsync(gsExe, args, TimeSpan.FromMinutes(2), cancellationToken);
 
-                using var proc = System.Diagnostics.Process.Start(startInfo);
-                if (proc == null) return new PdfOperationResult(false, "Failed to start LibreOffice process");
-                var so = await proc.StandardOutput.ReadToEndAsync(cancellationToken);
-                var se = await proc.StandardError.ReadToEndAsync(cancellationToken);
-                await proc.WaitForExitAsync(cancellationToken);
+                if (run.TimedOut)
+                    return new PdfOperationResult(false, "Ghostscript compression timed out after 2 minutes.");
 
-                if (proc.ExitCode != 0) return new PdfOperationResult(false, $"LibreOffice conversion failed: {se}");
+                if (run.ExitCode != 0)
+                    return new PdfOperationResult(false, $"Ghostscript compression failed: {run.StandardError}");
 
-                // Find generated file
-                var generated = Directory.EnumerateFiles(outDirAbs).FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Equals(Path.GetFileNameWithoutExtension(abs), StringComparison.OrdinalIgnoreCase) && Path.GetExtension(f).Equals(".docx", StringComparison.OrdinalIgnoreCase));
-                if (generated == null) return new PdfOperationResult(false, "LibreOffice completed but no output found");
-
-                var rel = Path.Combine(outDirRel, Path.GetFileName(generated)).Replace('\\', '/');
-                return new PdfOperationResult(true, "Converted to Word (docx)", rel);
+                var relative = Path.Combine("uploads", Path.GetFileName(outPath)).Replace('\\', '/');
+                return new PdfOperationResult(true, "Compression complete", relative);
             }
             catch (Exception ex)
             {
                 return new PdfOperationResult(false, ex.Message);
             }
+        }
+
+        public async Task<PdfOperationResult> ConvertPdfToWordAsync(string inputRelativePath, string outputFileName, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var abs = AbsolutePath(inputRelativePath);
+                if (!File.Exists(abs)) return new PdfOperationResult(false, "Input file not found");
+
+                var safeOutputName = string.IsNullOrWhiteSpace(outputFileName)
+                    ? $"{Path.GetFileNameWithoutExtension(abs)}.docx"
+                    : Path.ChangeExtension(Path.GetFileName(outputFileName), ".docx");
+
+                // Resolve soffice path: configured path (Tools:LibreOfficePath or LIBREOFFICE_PATH), then PATH candidates
+                string? soffice = GetConfiguredToolPath("LibreOfficePath");
+                if (string.IsNullOrWhiteSpace(soffice))
+                {
+                    string[] candidates = { "soffice", "libreoffice", "soffice.exe" };
+                    foreach (var c in candidates)
+                    {
+                        try
+                        {
+                            var probe = await RunProcessAsync(c, "--version", TimeSpan.FromSeconds(10), cancellationToken);
+                            if (probe.ExitCode == 0)
+                            {
+                                soffice = c;
+                                break;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(soffice))
+                {
+                    return new PdfOperationResult(false, "LibreOffice (soffice) not found. Install LibreOffice and ensure 'soffice' is on PATH, or set the Tools:LibreOfficePath configuration or LIBREOFFICE_PATH environment variable to the soffice executable path.");
+                }
+
+                var tempDirName = $"{Path.GetFileNameWithoutExtension(abs)}-word-{Guid.NewGuid():N}";
+                var outDirRel = Path.Combine("uploads", tempDirName).Replace('\\', '/');
+                var outDirAbs = AbsolutePath(outDirRel);
+                Directory.CreateDirectory(outDirAbs);
+
+                var run = await RunProcessAsync(
+                    soffice,
+                    $"--headless --nologo --nofirststartwizard --convert-to docx --outdir \"{outDirAbs}\" \"{abs}\"",
+                    TimeSpan.FromMinutes(2),
+                    cancellationToken);
+
+                if (run.TimedOut)
+                    return new PdfOperationResult(false, "LibreOffice PDF to Word conversion timed out after 2 minutes. Try a smaller PDF or check that LibreOffice is installed correctly.");
+
+                if (run.ExitCode != 0)
+                    return new PdfOperationResult(false, $"LibreOffice conversion failed: {run.StandardError}{run.StandardOutput}");
+
+                // Find generated file
+                var generated = Directory.EnumerateFiles(outDirAbs, "*.docx").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
+                if (generated == null)
+                    return new PdfOperationResult(false, $"LibreOffice completed but no DOCX output was found. {run.StandardOutput}{run.StandardError}");
+
+                var finalPath = SaveOutputPath(safeOutputName);
+                if (File.Exists(finalPath))
+                    File.Delete(finalPath);
+
+                File.Move(generated, finalPath);
+                TryDeleteDirectory(outDirAbs);
+
+                var rel = Path.Combine("uploads", Path.GetFileName(finalPath)).Replace('\\', '/');
+                return new PdfOperationResult(true, "Converted to Word (DOCX)", rel);
+            }
+            catch (Exception ex)
+            {
+                return new PdfOperationResult(false, ex.Message);
+            }
+        }
+
+        private static void TryDeleteDirectory(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
+            }
+            catch { }
         }
     }
 }

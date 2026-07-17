@@ -61,6 +61,14 @@ public class JobStore : IJobStore
             var cutoff = DateTime.UtcNow - JobRetention;
             foreach (var job in jobs)
             {
+                if (job.Status is JobStatus.Pending or JobStatus.Running)
+                {
+                    job.Status = JobStatus.Failed;
+                    job.Message = "This job was interrupted when the app stopped. Please run it again.";
+                    job.CompletedAt = DateTime.UtcNow;
+                    job.ProgressPercent = 0;
+                }
+
                 if (job.CompletedAt is not null && job.CompletedAt < cutoff
                     && job.Status is JobStatus.Completed or JobStatus.Failed)
                 {

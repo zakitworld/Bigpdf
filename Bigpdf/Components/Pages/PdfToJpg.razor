@@ -1,10 +1,11 @@
 @page "/pdftojpg"
-@using Bigpdf.Models
-@using Bigpdf.Services
-@using Bigpdf.Components.Shared
+@using global::Bigpdf.Models
+@using global::Bigpdf.Services
+@using global::Bigpdf.Components.Shared
 @inject IJobService JobService
 @inject IPdfService PdfService
 @inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
+@rendermode InteractiveServer
 
 <Workspace Title="PDF to JPG Converter" 
            Subtitle="Extract high-resolution images or render entire PDF pages into JPEG format." 

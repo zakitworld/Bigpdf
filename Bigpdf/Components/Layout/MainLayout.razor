@@ -4,25 +4,25 @@
 <header class="site-header">
     <div class="site-brand">
         <a href="/">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
-                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                <polyline points="14 2 14 8 20 8"/>
-            </svg>
+            <span class="brand-mark" aria-hidden="true">
+                <span></span><span></span><span></span>
+                <span></span><span></span><span></span>
+                <span></span><span></span><span></span>
+            </span>
             Big<span>pdf</span>
         </a>
     </div>
     <nav class="site-nav" aria-label="Primary navigation">
-        <NavLink href="/" class="nav-link" Match="NavLinkMatch.All">Dashboard</NavLink>
+        <NavLink href="/" class="nav-link nav-tools" Match="NavLinkMatch.All">Tools <span aria-hidden="true">v</span></NavLink>
         <NavLink href="/compress" class="nav-link" Match="NavLinkMatch.Prefix">Compress</NavLink>
+        <NavLink href="/office" class="nav-link" Match="NavLinkMatch.Prefix">Convert</NavLink>
         <NavLink href="/merge" class="nav-link" Match="NavLinkMatch.Prefix">Merge</NavLink>
-        <NavLink href="/split" class="nav-link" Match="NavLinkMatch.Prefix">Split</NavLink>
-        <NavLink href="/pdftojpg" class="nav-link" Match="NavLinkMatch.Prefix">PDF to JPG</NavLink>
-        <NavLink href="/ocr" class="nav-link" Match="NavLinkMatch.Prefix">OCR</NavLink>
-        <NavLink href="/office" class="nav-link" Match="NavLinkMatch.Prefix">PDF to Word</NavLink>
-        <NavLink href="/convert" class="nav-link" Match="NavLinkMatch.Prefix">Images to PDF</NavLink>
-        <NavLink href="/watermark" class="nav-link" Match="NavLinkMatch.Prefix">Watermark</NavLink>
-        <NavLink href="/pagenumbers" class="nav-link" Match="NavLinkMatch.Prefix">Page #</NavLink>
+        <NavLink href="/pagenumbers" class="nav-link" Match="NavLinkMatch.Prefix">Edit</NavLink>
+        <NavLink href="/watermark" class="nav-link" Match="NavLinkMatch.Prefix">Sign</NavLink>
+        <NavLink href="/ocr" class="nav-link" Match="NavLinkMatch.Prefix">AI PDF</NavLink>
         <NavLink href="/jobs" class="nav-link" Match="NavLinkMatch.Prefix">Jobs</NavLink>
+    </nav>
+    <div class="site-actions">
         <AuthorizeView>
             <Authorized>
                 <span class="nav-user">@context.User.Identity?.Name</span>
@@ -31,10 +31,11 @@
                 </form>
             </Authorized>
             <NotAuthorized>
-                <a href="/login" class="btn btn-primary" style="color: white; padding: 0.4rem 1rem;">Sign in</a>
+                <a href="/login" class="login-link">Log In</a>
             </NotAuthorized>
         </AuthorizeView>
-    </nav>
+        <a class="trial-button" href="/compress">Free Trial</a>
+    </div>
 </header>
 
 <main class="site-main">
@@ -42,7 +43,44 @@
 </main>
 
 <footer class="site-footer">
-    <p>&copy; @DateTime.UtcNow.Year Bigpdf. Built to industry standards using .NET Blazor Server &amp; PdfSharpCore.</p>
+    <div class="footer-brand">
+        <a href="/" class="footer-logo">
+            <span class="brand-mark" aria-hidden="true">
+                <span></span><span></span><span></span>
+                <span></span><span></span><span></span>
+                <span></span><span></span><span></span>
+            </span>
+            Big<span>pdf</span>
+        </a>
+        <p>We make PDF easy.</p>
+    </div>
+    <div class="footer-column">
+        <h2>Solutions</h2>
+        <a href="/">Sales</a>
+        <a href="/">Finance</a>
+        <a href="/">Real Estate</a>
+        <a href="/">Education</a>
+    </div>
+    <div class="footer-column">
+        <h2>Company</h2>
+        <a href="/">About</a>
+        <a href="/">Help</a>
+        <a href="/">Blog</a>
+        <a href="/">PDF Statistics</a>
+    </div>
+    <div class="footer-column">
+        <h2>Product</h2>
+        <a href="/compress">Pricing</a>
+        <a href="/jobs">Teams</a>
+        <a href="/">Developers</a>
+        <a href="/">Accessible PDF</a>
+    </div>
+    <div class="footer-column">
+        <h2>Apps</h2>
+        <a href="/">Download Bigpdf</a>
+        <a href="/pdftojpg">PDF Scanner</a>
+        <a href="/">Windows App</a>
+    </div>
 </footer>
 
 <div id="blazor-error-ui" data-nosnippet>

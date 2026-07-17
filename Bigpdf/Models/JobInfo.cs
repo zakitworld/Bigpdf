@@ -14,6 +14,8 @@ namespace Bigpdf.Models
         public string? Message { get; set; }
         public string? ResultPath { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
+        public int? ProgressPercent { get; set; }
     }
 }

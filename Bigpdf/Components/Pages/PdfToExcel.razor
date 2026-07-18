@@ -1,0 +1,12 @@
+@page "/pdf-to-excel"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Components.Shared
+@rendermode InteractiveServer
+
+<Workspace Title="PDF to Excel" 
+           Subtitle="Extract tabular data from PDFs into editable Excel spreadsheets (XLSX)." 
+           Gradient="var(--grad-excel)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="spreadsheet.xlsx"
+           JobTaskType="JobType.PdfToExcel" />

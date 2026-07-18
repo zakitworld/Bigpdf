@@ -1,0 +1,12 @@
+@page "/word-to-pdf"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Components.Shared
+@rendermode InteractiveServer
+
+<Workspace Title="Word to PDF" 
+           Subtitle="Convert Microsoft Word documents (DOC and DOCX) to professional PDF files." 
+           Gradient="var(--grad-word)" 
+           FileFilter=".doc,.docx" 
+           AllowMultiple="false" 
+           OutputName="document.pdf"
+           JobTaskType="JobType.WordToPdf" />

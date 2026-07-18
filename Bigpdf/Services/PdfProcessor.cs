@@ -522,16 +522,20 @@ namespace Bigpdf.Services
 
         public async Task<PdfOperationResult> ConvertPdfToWordAsync(string inputRelativePath, string outputFileName, CancellationToken cancellationToken = default)
         {
+            return await ConvertViaLibreOfficeAsync(inputRelativePath, "docx", outputFileName, cancellationToken);
+        }
+
+        public async Task<PdfOperationResult> ConvertViaLibreOfficeAsync(
+            string inputRelativePath, 
+            string targetExtension, 
+            string outputFileName, 
+            CancellationToken cancellationToken = default)
+        {
             try
             {
                 var abs = AbsolutePath(inputRelativePath);
                 if (!File.Exists(abs)) return new PdfOperationResult(false, "Input file not found");
 
-                var safeOutputName = string.IsNullOrWhiteSpace(outputFileName)
-                    ? $"{Path.GetFileNameWithoutExtension(abs)}.docx"
-                    : Path.ChangeExtension(Path.GetFileName(outputFileName), ".docx");
-
-                // Resolve soffice path: configured path (Tools:LibreOfficePath or LIBREOFFICE_PATH), then PATH candidates
                 string? soffice = GetConfiguredToolPath("LibreOfficePath");
                 if (string.IsNullOrWhiteSpace(soffice))
                 {
@@ -553,30 +557,37 @@ namespace Bigpdf.Services
 
                 if (string.IsNullOrWhiteSpace(soffice))
                 {
-                    return new PdfOperationResult(false, "LibreOffice (soffice) not found. Install LibreOffice and ensure 'soffice' is on PATH, or set the Tools:LibreOfficePath configuration or LIBREOFFICE_PATH environment variable to the soffice executable path.");
+                    return new PdfOperationResult(false, "LibreOffice (soffice) not found on the server. Install LibreOffice and make sure 'soffice' is on PATH, or configure Tools:LibreOfficePath.");
                 }
 
-                var tempDirName = $"{Path.GetFileNameWithoutExtension(abs)}-word-{Guid.NewGuid():N}";
+                var tempDirName = $"{Path.GetFileNameWithoutExtension(abs)}-conv-{Guid.NewGuid():N}";
                 var outDirRel = Path.Combine("uploads", tempDirName).Replace('\\', '/');
                 var outDirAbs = AbsolutePath(outDirRel);
                 Directory.CreateDirectory(outDirAbs);
 
+                // Run LibreOffice conversion
+                // Headless LibreOffice is highly versatile: converts PPT/Excel/Word/HTML/RTF/ODT to PDF, or PDF to Word/PPT/Excel.
                 var run = await RunProcessAsync(
                     soffice,
-                    $"--headless --nologo --nofirststartwizard --convert-to docx --outdir \"{outDirAbs}\" \"{abs}\"",
+                    $"--headless --nologo --nofirststartwizard --convert-to {targetExtension} --outdir \"{outDirAbs}\" \"{abs}\"",
                     TimeSpan.FromMinutes(2),
                     cancellationToken);
 
                 if (run.TimedOut)
-                    return new PdfOperationResult(false, "LibreOffice PDF to Word conversion timed out after 2 minutes. Try a smaller PDF or check that LibreOffice is installed correctly.");
+                    return new PdfOperationResult(false, "LibreOffice conversion timed out after 2 minutes.");
 
                 if (run.ExitCode != 0)
                     return new PdfOperationResult(false, $"LibreOffice conversion failed: {run.StandardError}{run.StandardOutput}");
 
                 // Find generated file
-                var generated = Directory.EnumerateFiles(outDirAbs, "*.docx").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
+                var pattern = $"*.{targetExtension}";
+                var generated = Directory.EnumerateFiles(outDirAbs, pattern).OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
                 if (generated == null)
-                    return new PdfOperationResult(false, $"LibreOffice completed but no DOCX output was found. {run.StandardOutput}{run.StandardError}");
+                    return new PdfOperationResult(false, $"LibreOffice completed but no {targetExtension.ToUpperInvariant()} output was found. {run.StandardOutput}{run.StandardError}");
+
+                var safeOutputName = string.IsNullOrWhiteSpace(outputFileName)
+                    ? $"{Path.GetFileNameWithoutExtension(abs)}.{targetExtension}"
+                    : Path.ChangeExtension(Path.GetFileName(outputFileName), $".{targetExtension}");
 
                 var finalPath = SaveOutputPath(safeOutputName);
                 if (File.Exists(finalPath))
@@ -586,11 +597,150 @@ namespace Bigpdf.Services
                 TryDeleteDirectory(outDirAbs);
 
                 var rel = Path.Combine("uploads", Path.GetFileName(finalPath)).Replace('\\', '/');
-                return new PdfOperationResult(true, "Converted to Word (DOCX)", rel);
+                return new PdfOperationResult(true, $"Converted successfully", rel);
             }
             catch (Exception ex)
             {
                 return new PdfOperationResult(false, ex.Message);
+            }
+        }
+
+        public async Task<PdfOperationResult> DeletePdfPagesAsync(
+            string inputRelativePath, 
+            IEnumerable<int> pagesToDelete, 
+            string outputFileName, 
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var abs = AbsolutePath(inputRelativePath);
+                if (!File.Exists(abs)) return new PdfOperationResult(false, "Input file not found");
+
+                using var input = PdfReader.Open(abs, PdfDocumentOpenMode.Import);
+                var output = new PdfDocument();
+                var toDelete = pagesToDelete.ToHashSet();
+
+                var pagesAdded = 0;
+                for (int i = 0; i < input.Pages.Count; i++)
+                {
+                    if (toDelete.Contains(i + 1)) continue; // 1-based index
+                    output.AddPage(input.Pages[i]);
+                    pagesAdded++;
+                }
+
+                if (pagesAdded == 0)
+                    return new PdfOperationResult(false, "Cannot delete all pages. A PDF must contain at least one page.");
+
+                var outPath = SaveOutputPath(outputFileName ?? "pages-deleted.pdf");
+                output.Save(outPath);
+                var relative = Path.Combine("uploads", Path.GetFileName(outPath)).Replace('\\', '/');
+                return await Task.FromResult(new PdfOperationResult(true, "Pages deleted successfully", relative));
+            }
+            catch (Exception ex)
+            {
+                return new PdfOperationResult(false, ex.Message);
+            }
+        }
+
+        public async Task<PdfOperationResult> RotatePdfAsync(
+            string inputRelativePath, 
+            int angle, 
+            IEnumerable<int> pagesToRotate, 
+            string outputFileName, 
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var abs = AbsolutePath(inputRelativePath);
+                if (!File.Exists(abs)) return new PdfOperationResult(false, "Input file not found");
+
+                using var input = PdfReader.Open(abs, PdfDocumentOpenMode.Import);
+                var output = new PdfDocument();
+                var toRotate = pagesToRotate.ToHashSet();
+
+                for (int i = 0; i < input.Pages.Count; i++)
+                {
+                    var page = output.AddPage(input.Pages[i]);
+                    if (toRotate.Count == 0 || toRotate.Contains(i + 1))
+                    {
+                        page.Rotate = (page.Rotate + angle) % 360;
+                    }
+                }
+
+                var outPath = SaveOutputPath(outputFileName ?? "rotated.pdf");
+                output.Save(outPath);
+                var relative = Path.Combine("uploads", Path.GetFileName(outPath)).Replace('\\', '/');
+                return await Task.FromResult(new PdfOperationResult(true, "Pages rotated successfully", relative));
+            }
+            catch (Exception ex)
+            {
+                return new PdfOperationResult(false, ex.Message);
+            }
+        }
+
+        public async Task<PdfOperationResult> ProtectPdfAsync(
+            string inputRelativePath, 
+            string password, 
+            string outputFileName, 
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var abs = AbsolutePath(inputRelativePath);
+                if (!File.Exists(abs)) return new PdfOperationResult(false, "Input file not found");
+
+                using var input = PdfReader.Open(abs, PdfDocumentOpenMode.Import);
+                var output = new PdfDocument();
+
+                for (int i = 0; i < input.Pages.Count; i++)
+                {
+                    output.AddPage(input.Pages[i]);
+                }
+
+                output.SecuritySettings.UserPassword = password;
+                output.SecuritySettings.OwnerPassword = password;
+                output.SecuritySettings.DocumentSecurityLevel = PdfSharpCore.Pdf.Security.PdfDocumentSecurityLevel.Encrypted128Bit;
+                output.SecuritySettings.PermitPrint = true;
+                output.SecuritySettings.PermitAccessibilityExtractContent = true;
+
+                var outPath = SaveOutputPath(outputFileName ?? "protected.pdf");
+                output.Save(outPath);
+                var relative = Path.Combine("uploads", Path.GetFileName(outPath)).Replace('\\', '/');
+                return await Task.FromResult(new PdfOperationResult(true, "PDF password-protected successfully", relative));
+            }
+            catch (Exception ex)
+            {
+                return new PdfOperationResult(false, ex.Message);
+            }
+        }
+
+        public async Task<PdfOperationResult> UnlockPdfAsync(
+            string inputRelativePath, 
+            string password, 
+            string outputFileName, 
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var abs = AbsolutePath(inputRelativePath);
+                if (!File.Exists(abs)) return new PdfOperationResult(false, "Input file not found");
+
+                using var input = PdfReader.Open(abs, password, PdfDocumentOpenMode.Import);
+                var output = new PdfDocument();
+
+                for (int i = 0; i < input.Pages.Count; i++)
+                {
+                    output.AddPage(input.Pages[i]);
+                }
+
+                var outPath = SaveOutputPath(outputFileName ?? "unlocked.pdf");
+                output.Save(outPath);
+                var relative = Path.Combine("uploads", Path.GetFileName(outPath)).Replace('\\', '/');
+                return await Task.FromResult(new PdfOperationResult(true, "PDF unlocked successfully", relative));
+            }
+            catch (Exception ex)
+            {
+                return new PdfOperationResult(false, $"Failed to unlock PDF: {ex.Message}");
             }
         }
 

@@ -1,0 +1,12 @@
+@page "/ppt-to-pdf"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Components.Shared
+@rendermode InteractiveServer
+
+<Workspace Title="PowerPoint to PDF" 
+           Subtitle="Convert your PPT and PPTX presentation slides into clean PDF documents using LibreOffice headless rendering." 
+           Gradient="var(--grad-ppt)" 
+           FileFilter=".ppt,.pptx" 
+           AllowMultiple="false" 
+           OutputName="presentation.pdf"
+           JobTaskType="JobType.PptToPdf" />

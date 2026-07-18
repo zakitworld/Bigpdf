@@ -1,0 +1,12 @@
+@page "/pdf-to-ppt"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Components.Shared
+@rendermode InteractiveServer
+
+<Workspace Title="PDF to PowerPoint" 
+           Subtitle="Convert your PDF files to editable PowerPoint presentations (PPTX) using LibreOffice." 
+           Gradient="var(--grad-ppt)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="presentation.pptx"
+           JobTaskType="JobType.PdfToPpt" />

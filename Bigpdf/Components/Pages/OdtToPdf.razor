@@ -1,0 +1,12 @@
+@page "/odt-to-pdf"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Components.Shared
+@rendermode InteractiveServer
+
+<Workspace Title="ODT to PDF" 
+           Subtitle="Convert OpenDocument Text (ODT) files to professional PDF documents." 
+           Gradient="var(--grad-word)" 
+           FileFilter=".odt" 
+           AllowMultiple="false" 
+           OutputName="odt-converted.pdf"
+           JobTaskType="JobType.OdtToPdf" />

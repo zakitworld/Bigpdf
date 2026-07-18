@@ -1,0 +1,79 @@
+@page "/rotate"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Services
+@using global::Bigpdf.Components.Shared
+@inject IJobService JobService
+@rendermode InteractiveServer
+
+<Workspace Title="Rotate PDF Pages" 
+           Subtitle="Rotate pages in your PDF document by 90, 180, or 270 degrees." 
+           Gradient="var(--grad-split)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="rotated.pdf"
+           OnDirectSubmit="HandleRotate">
+    <SettingsTemplate>
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="angle-select">Rotation Angle:</label>
+                <select id="angle-select" class="form-control" @bind="_angle">
+                    <option value="90">90° Clockwise</option>
+                    <option value="180">180° Flip</option>
+                    <option value="270">270° Counter-Clockwise</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label class="form-label" for="pages-select">Pages to rotate (leave empty for all pages):</label>
+                <input id="pages-select" class="form-control" @bind="_pages" placeholder="e.g. 1, 3-5 (or leave empty for all)" />
+            </div>
+        </div>
+    </SettingsTemplate>
+</Workspace>
+
+@code {
+    private string _angle = "90";
+    private string _pages = "";
+
+    private async Task HandleRotate(Workspace.WorkspaceSubmitEventArgs args)
+    {
+        if (!string.IsNullOrWhiteSpace(_pages))
+        {
+            if (!PageRangeParser.TryParse(_pages, out _, out var parseError))
+            {
+                args.Result = new PdfOperationResult(false, parseError ?? "Invalid page range format.");
+                return;
+            }
+        }
+
+        var rel = Path.Combine("uploads", args.SelectedFiles.First()).Replace('\\', '/');
+        var req = new JobRequest
+        {
+            Type = JobType.RotatePdf,
+            InputRelativePath = rel,
+            Parameters = new Dictionary<string, string>
+            {
+                ["angle"] = _angle,
+                ["pages"] = string.IsNullOrWhiteSpace(_pages) ? "all" : _pages,
+                ["output"] = args.OutputName
+            }
+        };
+
+        var job = await JobService.EnqueueJobAsync(req);
+        while (job.Status == JobStatus.Pending || job.Status == JobStatus.Running)
+        {
+            await Task.Delay(1000);
+            var updated = JobService.GetJob(job.Id);
+            if (updated == null) break;
+            job = updated;
+        }
+
+        if (job.Status == JobStatus.Completed)
+        {
+            args.Result = new PdfOperationResult(true, job.Message ?? "Pages rotated successfully.", job.ResultPath);
+        }
+        else
+        {
+            args.Result = new PdfOperationResult(false, job.Message ?? "Failed to rotate PDF.");
+        }
+    }
+}

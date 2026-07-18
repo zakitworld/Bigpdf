@@ -25,5 +25,15 @@ namespace Bigpdf.Services
         Task<PdfOperationResult> OcrPdfAsync(string inputRelativePath, string outputTextFileRelative, CancellationToken cancellationToken = default);
 
         Task<PdfOperationResult> ConvertPdfToWordAsync(string inputRelativePath, string outputRelativePath, CancellationToken cancellationToken = default);
+
+        Task<PdfOperationResult> ConvertViaLibreOfficeAsync(string inputRelativePath, string targetExtension, string outputFileName, CancellationToken cancellationToken = default);
+
+        Task<PdfOperationResult> DeletePdfPagesAsync(string inputRelativePath, IEnumerable<int> pagesToDelete, string outputFileName, CancellationToken cancellationToken = default);
+
+        Task<PdfOperationResult> RotatePdfAsync(string inputRelativePath, int angle, IEnumerable<int> pagesToRotate, string outputFileName, CancellationToken cancellationToken = default);
+
+        Task<PdfOperationResult> ProtectPdfAsync(string inputRelativePath, string password, string outputFileName, CancellationToken cancellationToken = default);
+
+        Task<PdfOperationResult> UnlockPdfAsync(string inputRelativePath, string password, string outputFileName, CancellationToken cancellationToken = default);
     }
 }

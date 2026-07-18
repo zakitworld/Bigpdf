@@ -1,0 +1,12 @@
+@page "/html-to-pdf"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Components.Shared
+@rendermode InteractiveServer
+
+<Workspace Title="HTML to PDF" 
+           Subtitle="Convert HTML web pages or source documents into PDF format." 
+           Gradient="var(--grad-word)" 
+           FileFilter=".html,.htm" 
+           AllowMultiple="false" 
+           OutputName="html-converted.pdf"
+           JobTaskType="JobType.HtmlToPdf" />

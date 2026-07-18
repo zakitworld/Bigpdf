@@ -1,0 +1,12 @@
+@page "/txt-to-pdf"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Components.Shared
+@rendermode InteractiveServer
+
+<Workspace Title="TXT to PDF" 
+           Subtitle="Convert raw text document files to formatted PDF layout automatically." 
+           Gradient="var(--grad-word)" 
+           FileFilter=".txt" 
+           AllowMultiple="false" 
+           OutputName="text-converted.pdf"
+           JobTaskType="JobType.TxtToPdf" />

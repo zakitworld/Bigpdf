@@ -1,0 +1,12 @@
+@page "/rtf-to-pdf"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Components.Shared
+@rendermode InteractiveServer
+
+<Workspace Title="RTF to PDF" 
+           Subtitle="Convert Rich Text Format (RTF) documents to clean, shareable PDFs." 
+           Gradient="var(--grad-word)" 
+           FileFilter=".rtf" 
+           AllowMultiple="false" 
+           OutputName="rtf-converted.pdf"
+           JobTaskType="JobType.RtfToPdf" />

@@ -1,0 +1,70 @@
+@page "/delete-pages"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Services
+@using global::Bigpdf.Components.Shared
+@inject IJobService JobService
+@rendermode InteractiveServer
+
+<Workspace Title="Delete PDF Pages" 
+           Subtitle="Remove specific pages or ranges of pages from your PDF document." 
+           Gradient="var(--grad-split)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="pages-deleted.pdf"
+           OnDirectSubmit="HandleDeletePages">
+    <SettingsTemplate>
+        <div class="form-group" style="margin: 0;">
+            <label class="form-label" for="pages-input">Pages to delete (e.g. 2, 4-5):</label>
+            <input id="pages-input" class="form-control" @bind="_pages" placeholder="e.g. 2, 4-5" />
+        </div>
+    </SettingsTemplate>
+</Workspace>
+
+@code {
+    private string _pages = "";
+
+    private async Task HandleDeletePages(Workspace.WorkspaceSubmitEventArgs args)
+    {
+        if (string.IsNullOrWhiteSpace(_pages))
+        {
+            args.Result = new PdfOperationResult(false, "Please specify pages or page ranges to delete.");
+            return;
+        }
+
+        if (!PageRangeParser.TryParse(_pages, out _, out var parseError))
+        {
+            args.Result = new PdfOperationResult(false, parseError ?? "Invalid page range format.");
+            return;
+        }
+
+        var rel = Path.Combine("uploads", args.SelectedFiles.First()).Replace('\\', '/');
+        var req = new JobRequest
+        {
+            Type = JobType.DeletePages,
+            InputRelativePath = rel,
+            Parameters = new Dictionary<string, string>
+            {
+                ["pages"] = _pages,
+                ["output"] = args.OutputName
+            }
+        };
+
+        var job = await JobService.EnqueueJobAsync(req);
+        while (job.Status == JobStatus.Pending || job.Status == JobStatus.Running)
+        {
+            await Task.Delay(1000);
+            var updated = JobService.GetJob(job.Id);
+            if (updated == null) break;
+            job = updated;
+        }
+
+        if (job.Status == JobStatus.Completed)
+        {
+            args.Result = new PdfOperationResult(true, job.Message ?? "Pages removed successfully.", job.ResultPath);
+        }
+        else
+        {
+            args.Result = new PdfOperationResult(false, job.Message ?? "Failed to delete PDF pages.");
+        }
+    }
+}

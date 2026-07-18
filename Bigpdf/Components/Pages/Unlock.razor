@@ -1,0 +1,58 @@
+@page "/unlock"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Services
+@using global::Bigpdf.Components.Shared
+@inject IJobService JobService
+@rendermode InteractiveServer
+
+<Workspace Title="Unlock PDF" 
+           Subtitle="Remove password protection, encryption, and permission restrictions from your PDF document." 
+           Gradient="var(--grad-protect)" 
+           FileFilter=".pdf" 
+           AllowMultiple="false" 
+           OutputName="unlocked.pdf"
+           OnDirectSubmit="HandleUnlock">
+    <SettingsTemplate>
+        <div class="form-group" style="margin: 0;">
+            <label class="form-label" for="password-input">Document Password (if encrypted):</label>
+            <input type="password" id="password-input" class="form-control" @bind="_password" placeholder="Enter password (leave empty if not encrypted but restricted)" />
+        </div>
+    </SettingsTemplate>
+</Workspace>
+
+@code {
+    private string _password = "";
+
+    private async Task HandleUnlock(Workspace.WorkspaceSubmitEventArgs args)
+    {
+        var rel = Path.Combine("uploads", args.SelectedFiles.First()).Replace('\\', '/');
+        var req = new JobRequest
+        {
+            Type = JobType.UnlockPdf,
+            InputRelativePath = rel,
+            Parameters = new Dictionary<string, string>
+            {
+                ["password"] = _password,
+                ["output"] = args.OutputName
+            }
+        };
+
+        var job = await JobService.EnqueueJobAsync(req);
+        while (job.Status == JobStatus.Pending || job.Status == JobStatus.Running)
+        {
+            await Task.Delay(1000);
+            var updated = JobService.GetJob(job.Id);
+            if (updated == null) break;
+            job = updated;
+        }
+
+        if (job.Status == JobStatus.Completed)
+        {
+            args.Result = new PdfOperationResult(true, job.Message ?? "PDF unlocked successfully.", job.ResultPath);
+        }
+        else
+        {
+            args.Result = new PdfOperationResult(false, job.Message ?? "Failed to unlock PDF. Please check if the password is correct.");
+        }
+    }
+}

@@ -1,0 +1,12 @@
+@page "/excel-to-pdf"
+@using global::Bigpdf.Models
+@using global::Bigpdf.Components.Shared
+@rendermode InteractiveServer
+
+<Workspace Title="Excel to PDF" 
+           Subtitle="Convert XLS and XLSX spreadsheets to professional PDF documents with column formatting." 
+           Gradient="var(--grad-excel)" 
+           FileFilter=".xls,.xlsx" 
+           AllowMultiple="false" 
+           OutputName="spreadsheet.pdf"
+           JobTaskType="JobType.ExcelToPdf" />

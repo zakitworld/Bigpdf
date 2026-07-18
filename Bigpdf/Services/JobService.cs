@@ -74,6 +74,55 @@ namespace Bigpdf.Services
                             request.InputRelativePath!,
                             request.OutputName ?? "numbered.pdf",
                             jobToken),
+                        JobType.PptToPdf => await _processor.ConvertViaLibreOfficeAsync(
+                            request.InputRelativePath!,
+                            "pdf",
+                            request.OutputName ?? "converted.pdf",
+                            jobToken),
+                        JobType.PdfToPpt => await _processor.ConvertViaLibreOfficeAsync(
+                            request.InputRelativePath!,
+                            "pptx",
+                            request.OutputName ?? "converted.pptx",
+                            jobToken),
+                        JobType.ExcelToPdf => await _processor.ConvertViaLibreOfficeAsync(
+                            request.InputRelativePath!,
+                            "pdf",
+                            request.OutputName ?? "converted.pdf",
+                            jobToken),
+                        JobType.PdfToExcel => await _processor.ConvertViaLibreOfficeAsync(
+                            request.InputRelativePath!,
+                            "xlsx",
+                            request.OutputName ?? "converted.xlsx",
+                            jobToken),
+                        JobType.WordToPdf => await _processor.ConvertViaLibreOfficeAsync(
+                            request.InputRelativePath!,
+                            "pdf",
+                            request.OutputName ?? "converted.pdf",
+                            jobToken),
+                        JobType.TxtToPdf => await _processor.ConvertViaLibreOfficeAsync(
+                            request.InputRelativePath!,
+                            "pdf",
+                            request.OutputName ?? "converted.pdf",
+                            jobToken),
+                        JobType.RtfToPdf => await _processor.ConvertViaLibreOfficeAsync(
+                            request.InputRelativePath!,
+                            "pdf",
+                            request.OutputName ?? "converted.pdf",
+                            jobToken),
+                        JobType.OdtToPdf => await _processor.ConvertViaLibreOfficeAsync(
+                            request.InputRelativePath!,
+                            "pdf",
+                            request.OutputName ?? "converted.pdf",
+                            jobToken),
+                        JobType.HtmlToPdf => await _processor.ConvertViaLibreOfficeAsync(
+                            request.InputRelativePath!,
+                            "pdf",
+                            request.OutputName ?? "converted.pdf",
+                            jobToken),
+                        JobType.DeletePages => await RunDeletePagesAsync(request, jobToken),
+                        JobType.RotatePdf => await RunRotatePdfAsync(request, jobToken),
+                        JobType.ProtectPdf => await RunProtectPdfAsync(request, jobToken),
+                        JobType.UnlockPdf => await RunUnlockPdfAsync(request, jobToken),
                         _ => new PdfOperationResult(false, $"Unsupported job type: {request.Type}")
                     };
 
@@ -124,12 +173,70 @@ namespace Bigpdf.Services
                 cancellationToken);
         }
 
+        private async Task<PdfOperationResult> RunDeletePagesAsync(JobRequest request, CancellationToken cancellationToken)
+        {
+            var pagesValue = request.Parameters?.TryGetValue("pages", out var pagesText) == true ? pagesText : string.Empty;
+            if (!PageRangeParser.TryParse(pagesValue, out var pages, out var parseError))
+                return new PdfOperationResult(false, parseError ?? "Invalid page range");
+
+            return await _processor.DeletePdfPagesAsync(
+                request.InputRelativePath!,
+                pages,
+                request.Parameters?.TryGetValue("output", out var output) == true ? output : "deleted.pdf",
+                cancellationToken);
+        }
+
+        private async Task<PdfOperationResult> RunRotatePdfAsync(JobRequest request, CancellationToken cancellationToken)
+        {
+            var angleText = request.Parameters?.TryGetValue("angle", out var angleVal) == true ? angleVal : "90";
+            if (!int.TryParse(angleText, out var angle)) angle = 90;
+
+            var pagesValue = request.Parameters?.TryGetValue("pages", out var pagesText) == true ? pagesText : string.Empty;
+            var pages = new List<int>();
+            if (!string.IsNullOrWhiteSpace(pagesValue) && pagesValue != "all")
+            {
+                if (!PageRangeParser.TryParse(pagesValue, out pages, out var parseError))
+                    return new PdfOperationResult(false, parseError ?? "Invalid page range");
+            }
+
+            return await _processor.RotatePdfAsync(
+                request.InputRelativePath!,
+                angle,
+                pages,
+                request.Parameters?.TryGetValue("output", out var output) == true ? output : "rotated.pdf",
+                cancellationToken);
+        }
+
+        private async Task<PdfOperationResult> RunProtectPdfAsync(JobRequest request, CancellationToken cancellationToken)
+        {
+            var password = request.Parameters?.TryGetValue("password", out var pwd) == true ? pwd : string.Empty;
+            if (string.IsNullOrWhiteSpace(password)) return new PdfOperationResult(false, "Password cannot be empty");
+
+            return await _processor.ProtectPdfAsync(
+                request.InputRelativePath!,
+                password,
+                request.Parameters?.TryGetValue("output", out var output) == true ? output : "protected.pdf",
+                cancellationToken);
+        }
+
+        private async Task<PdfOperationResult> RunUnlockPdfAsync(JobRequest request, CancellationToken cancellationToken)
+        {
+            var password = request.Parameters?.TryGetValue("password", out var pwd) == true ? pwd : string.Empty;
+            return await _processor.UnlockPdfAsync(
+                request.InputRelativePath!,
+                password,
+                request.Parameters?.TryGetValue("output", out var output) == true ? output : "unlocked.pdf",
+                cancellationToken);
+        }
+
         private static TimeSpan GetJobTimeout(JobType type) => type switch
         {
             JobType.PdfToWord => TimeSpan.FromMinutes(3),
             JobType.OcrPdf => TimeSpan.FromMinutes(4),
             JobType.PdfToJpg => TimeSpan.FromMinutes(3),
             JobType.CompressPdf => TimeSpan.FromMinutes(3),
+            JobType.PptToPdf or JobType.PdfToPpt or JobType.ExcelToPdf or JobType.PdfToExcel or JobType.WordToPdf => TimeSpan.FromMinutes(3),
+            JobType.TxtToPdf or JobType.RtfToPdf or JobType.OdtToPdf or JobType.HtmlToPdf => TimeSpan.FromMinutes(2),
             _ => TimeSpan.FromMinutes(2)
         };
 
@@ -142,6 +249,19 @@ namespace Bigpdf.Services
             JobType.Merge => "PDF merge",
             JobType.Split => "PDF split",
             JobType.AddPageNumbers => "page numbering",
+            JobType.PptToPdf => "PowerPoint to PDF conversion",
+            JobType.PdfToPpt => "PDF to PowerPoint conversion",
+            JobType.ExcelToPdf => "Excel to PDF conversion",
+            JobType.PdfToExcel => "PDF to Excel conversion",
+            JobType.WordToPdf => "Word to PDF conversion",
+            JobType.TxtToPdf => "TXT to PDF conversion",
+            JobType.RtfToPdf => "RTF to PDF conversion",
+            JobType.OdtToPdf => "ODT to PDF conversion",
+            JobType.HtmlToPdf => "HTML to PDF conversion",
+            JobType.DeletePages => "page deletion",
+            JobType.RotatePdf => "page rotation",
+            JobType.ProtectPdf => "PDF encryption",
+            JobType.UnlockPdf => "PDF decryption",
             _ => "job"
         };
     }

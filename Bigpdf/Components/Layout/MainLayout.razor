@@ -12,17 +12,99 @@
             Big<span>pdf</span>
         </a>
     </div>
+
+    <button class="nav-hamburger" onclick="this.closest('.site-header').classList.toggle('nav-open')" aria-label="Toggle navigation">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+
     <nav class="site-nav" aria-label="Primary navigation">
-        <NavLink href="/" class="nav-link nav-tools" Match="NavLinkMatch.All">Tools <span aria-hidden="true">v</span></NavLink>
-        <NavLink href="/compress" class="nav-link" Match="NavLinkMatch.Prefix">Compress</NavLink>
-        <NavLink href="/office" class="nav-link" Match="NavLinkMatch.Prefix">Convert</NavLink>
-        <NavLink href="/merge" class="nav-link" Match="NavLinkMatch.Prefix">Merge</NavLink>
-        <NavLink href="/pagenumbers" class="nav-link" Match="NavLinkMatch.Prefix">Edit</NavLink>
-        <NavLink href="/watermark" class="nav-link" Match="NavLinkMatch.Prefix">Sign</NavLink>
-        <NavLink href="/reader" class="nav-link" Match="NavLinkMatch.Prefix">Reader</NavLink>
-        <NavLink href="/ocr" class="nav-link" Match="NavLinkMatch.Prefix">AI PDF</NavLink>
-        <NavLink href="/jobs" class="nav-link" Match="NavLinkMatch.Prefix">Jobs</NavLink>
+        <a href="/" class="nav-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            All Tools
+        </a>
+
+        <!-- Convert Dropdown -->
+        <div class="nav-dropdown">
+            <button class="nav-link nav-dropdown-trigger" onclick="toggleDropdown(this)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+                Convert
+                <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="nav-dropdown-menu">
+                <div class="dropdown-section">
+                    <span class="dropdown-heading">Images</span>
+                    <a href="/convert" class="dropdown-item"><span class="dropdown-dot" style="background:#ffb300;"></span> JPG to PDF</a>
+                    <a href="/pdftojpg" class="dropdown-item"><span class="dropdown-dot" style="background:#ffb300;"></span> PDF to JPG</a>
+                </div>
+                <div class="dropdown-section">
+                    <span class="dropdown-heading">Office</span>
+                    <a href="/word-to-pdf" class="dropdown-item"><span class="dropdown-dot" style="background:#3996f3;"></span> Word to PDF</a>
+                    <a href="/pdf-to-word" class="dropdown-item"><span class="dropdown-dot" style="background:#3996f3;"></span> PDF to Word</a>
+                    <a href="/excel-to-pdf" class="dropdown-item"><span class="dropdown-dot" style="background:#04c853;"></span> Excel to PDF</a>
+                    <a href="/pdf-to-excel" class="dropdown-item"><span class="dropdown-dot" style="background:#04c853;"></span> PDF to Excel</a>
+                    <a href="/ppt-to-pdf" class="dropdown-item"><span class="dropdown-dot" style="background:#ff8500;"></span> PPT to PDF</a>
+                    <a href="/pdf-to-ppt" class="dropdown-item"><span class="dropdown-dot" style="background:#ff8500;"></span> PDF to PPT</a>
+                </div>
+                <div class="dropdown-section">
+                    <span class="dropdown-heading">Documents</span>
+                    <a href="/txt-to-pdf" class="dropdown-item"><span class="dropdown-dot" style="background:#3996f3;"></span> TXT to PDF</a>
+                    <a href="/rtf-to-pdf" class="dropdown-item"><span class="dropdown-dot" style="background:#3996f3;"></span> RTF to PDF</a>
+                    <a href="/odt-to-pdf" class="dropdown-item"><span class="dropdown-dot" style="background:#3996f3;"></span> ODT to PDF</a>
+                    <a href="/html-to-pdf" class="dropdown-item"><span class="dropdown-dot" style="background:#3996f3;"></span> HTML to PDF</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Organize Dropdown -->
+        <div class="nav-dropdown">
+            <button class="nav-link nav-dropdown-trigger" onclick="toggleDropdown(this)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                Organize
+                <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="nav-dropdown-menu">
+                <a href="/merge" class="dropdown-item"><span class="dropdown-dot" style="background:#7c5cf4;"></span> Merge PDF</a>
+                <a href="/split" class="dropdown-item"><span class="dropdown-dot" style="background:#ec4899;"></span> Split PDF</a>
+                <a href="/delete-pages" class="dropdown-item"><span class="dropdown-dot" style="background:#7c5cf4;"></span> Delete Pages</a>
+                <a href="/rotate" class="dropdown-item"><span class="dropdown-dot" style="background:#7c5cf4;"></span> Rotate PDF</a>
+                <a href="/compress" class="dropdown-item"><span class="dropdown-dot" style="background:#f59e0b;"></span> Compress PDF</a>
+                <a href="/pagenumbers" class="dropdown-item"><span class="dropdown-dot" style="background:#14c3c7;"></span> Number Pages</a>
+                <a href="/watermark" class="dropdown-item"><span class="dropdown-dot" style="background:#ef4444;"></span> Watermark PDF</a>
+            </div>
+        </div>
+
+        <!-- Security Dropdown -->
+        <div class="nav-dropdown">
+            <button class="nav-link nav-dropdown-trigger" onclick="toggleDropdown(this)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Security
+                <svg class="chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="nav-dropdown-menu">
+                <a href="/protect" class="dropdown-item"><span class="dropdown-dot" style="background:#ff5277;"></span> Protect PDF</a>
+                <a href="/unlock" class="dropdown-item"><span class="dropdown-dot" style="background:#ff5277;"></span> Unlock PDF</a>
+            </div>
+        </div>
+
+        <!-- Direct Links -->
+        <a href="/reader" class="nav-link">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            Reader
+        </a>
+        <a href="/edit" class="nav-link">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"/></svg>
+            Edit
+        </a>
+        <a href="/ocr" class="nav-link">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            OCR
+        </a>
+        <a href="/jobs" class="nav-link nav-link-jobs">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Jobs
+        </a>
     </nav>
+
     <div class="site-actions">
         <AuthorizeView>
             <Authorized>

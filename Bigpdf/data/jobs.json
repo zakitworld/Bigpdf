@@ -1,12 +1,36 @@
 [
   {
+    "Id": "dc0070d4539942c3846d0e393d8aaca3",
+    "Type": 0,
+    "Status": 3,
+    "Message": "Ghostscript not found on the server. Install Ghostscript and ensure \u0027gs\u0027 or \u0027gswin64c.exe\u0027 is on PATH, or set the Tools:GhostscriptPath configuration or GHOSTSCRIPT_PATH environment variable to the gs executable path. See https://www.ghostscript.com/",
+    "ResultPath": null,
+    "CreatedAt": "2026-07-18T17:50:24.8573786Z",
+    "StartedAt": "2026-07-18T17:50:24.8603549Z",
+    "CompletedAt": "2026-07-18T17:50:24.9828124Z",
+    "ProgressPercent": 0
+  },
+  {
+    "Id": "1475c3878ed247f4a933aa1692bf561b",
+    "Type": 3,
+    "Status": 3,
+    "Message": "LibreOffice (soffice) not found on the server. Install LibreOffice and make sure \u0027soffice\u0027 is on PATH, or configure Tools:LibreOfficePath.",
+    "ResultPath": null,
+    "CreatedAt": "2026-07-18T17:48:17.8808219Z",
+    "StartedAt": "2026-07-18T17:48:17.8880672Z",
+    "CompletedAt": "2026-07-18T17:48:18.1353989Z",
+    "ProgressPercent": 0
+  },
+  {
     "Id": "8ee143d49fd844aba829d3f8e03687e5",
     "Type": 3,
     "Status": 3,
     "Message": "LibreOffice (soffice) not found. Install LibreOffice and ensure \u0027soffice\u0027 is on PATH, or set the Tools:LibreOfficePath configuration or LIBREOFFICE_PATH environment variable to the soffice executable path.",
     "ResultPath": null,
     "CreatedAt": "2026-07-17T21:56:41.5649648Z",
-    "CompletedAt": "2026-07-17T21:56:41.739305Z"
+    "StartedAt": null,
+    "CompletedAt": "2026-07-17T21:56:41.739305Z",
+    "ProgressPercent": null
   },
   {
     "Id": "a8e7747a825248a18a95c2f4fc0f928e",
@@ -15,7 +39,9 @@
     "Message": "LibreOffice (soffice) not found. Install LibreOffice and ensure \u0027soffice\u0027 is on PATH, or set the Tools:LibreOfficePath configuration or LIBREOFFICE_PATH environment variable to the soffice executable path.",
     "ResultPath": null,
     "CreatedAt": "2026-07-17T21:55:00.4081583Z",
-    "CompletedAt": "2026-07-17T21:55:00.69969Z"
+    "StartedAt": null,
+    "CompletedAt": "2026-07-17T21:55:00.69969Z",
+    "ProgressPercent": null
   },
   {
     "Id": "e1c924c3daee49199f10a2817ba25e5c",
@@ -24,7 +50,9 @@
     "Message": "LibreOffice (soffice) not found. Install LibreOffice and ensure \u0027soffice\u0027 is on PATH, or set the Tools:LibreOfficePath configuration or LIBREOFFICE_PATH environment variable to the soffice executable path.",
     "ResultPath": null,
     "CreatedAt": "2026-07-17T21:25:18.5206743Z",
-    "CompletedAt": "2026-07-17T21:25:18.9291219Z"
+    "StartedAt": null,
+    "CompletedAt": "2026-07-17T21:25:18.9291219Z",
+    "ProgressPercent": null
   },
   {
     "Id": "885a4315fb864818855a53f9e6060b1e",
@@ -33,7 +61,9 @@
     "Message": "Ghostscript not found on the server. Install Ghostscript and ensure \u0027gs\u0027 or \u0027gswin64c.exe\u0027 is on PATH. See https://www.ghostscript.com/",
     "ResultPath": null,
     "CreatedAt": "2026-07-15T17:30:37.9056975Z",
-    "CompletedAt": "2026-07-15T17:30:37.9455895Z"
+    "StartedAt": null,
+    "CompletedAt": "2026-07-15T17:30:37.9455895Z",
+    "ProgressPercent": null
   },
   {
     "Id": "046440dfe3e7401f847707c2cc1207f0",
@@ -42,7 +72,9 @@
     "Message": "LibreOffice (soffice) not found. Install LibreOffice and ensure \u0027soffice\u0027 is on PATH, or set the LIBREOFFICE_PATH environment variable to the soffice executable path.",
     "ResultPath": null,
     "CreatedAt": "2026-07-15T17:29:57.6097793Z",
-    "CompletedAt": "2026-07-15T17:29:57.6680629Z"
+    "StartedAt": null,
+    "CompletedAt": "2026-07-15T17:29:57.6680629Z",
+    "ProgressPercent": null
   },
   {
     "Id": "54df1f176ab0423fb996179f663125c7",
@@ -51,7 +83,9 @@
     "Message": "LibreOffice (soffice) not found. Install LibreOffice and ensure \u0027soffice\u0027 is on PATH.",
     "ResultPath": null,
     "CreatedAt": "2026-07-15T17:15:12.310242Z",
-    "CompletedAt": "2026-07-15T17:15:12.3708378Z"
+    "StartedAt": null,
+    "CompletedAt": "2026-07-15T17:15:12.3708378Z",
+    "ProgressPercent": null
   },
   {
     "Id": "3ad4e4d3481a49319583f848228c14aa",
@@ -60,7 +94,9 @@
     "Message": "Ghostscript not found on the server. Install Ghostscript and ensure \u0027gs\u0027 or \u0027gswin64c.exe\u0027 is on PATH. See https://www.ghostscript.com/",
     "ResultPath": null,
     "CreatedAt": "2026-07-15T17:08:33.8556423Z",
-    "CompletedAt": "2026-07-15T17:08:33.9183659Z"
+    "StartedAt": null,
+    "CompletedAt": "2026-07-15T17:08:33.9183659Z",
+    "ProgressPercent": null
   },
   {
     "Id": "66d9edc2b4c94b1ca5b5cb5735d68bc6",
@@ -69,6 +105,8 @@
     "Message": "LibreOffice (soffice) not found. Install LibreOffice and ensure \u0027soffice\u0027 is on PATH.",
     "ResultPath": null,
     "CreatedAt": "2026-07-15T17:05:39.1591413Z",
-    "CompletedAt": "2026-07-15T17:05:39.2492749Z"
+    "StartedAt": null,
+    "CompletedAt": "2026-07-15T17:05:39.2492749Z",
+    "ProgressPercent": null
   }
 ]

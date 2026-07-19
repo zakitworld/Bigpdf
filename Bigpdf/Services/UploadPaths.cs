@@ -1,47 +1,39 @@
-using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.FileProviders;
 
 namespace Bigpdf.Services;
 
 public static class UploadPaths
 {
-    public static string GetUploadsRoot(IWebHostEnvironment env) =>
-        Path.Combine(env.ContentRootPath, "uploads");
+    public static string GetUploadsRoot(IWebHostEnvironment env)
+    {
+        var uploadsPath = Path.Combine(env.ContentRootPath, "uploads");
+        Directory.CreateDirectory(uploadsPath);
+        return uploadsPath;
+    }
 
     public static bool TryResolveUploadPath(IWebHostEnvironment env, string relativePath, out string fullPath)
     {
         fullPath = string.Empty;
-        if (string.IsNullOrWhiteSpace(relativePath))
-            return false;
+        try
+        {
+            var uploadsRoot = GetUploadsRoot(env);
+            var combined = Path.Combine(uploadsRoot, relativePath);
 
-        var uploadsRoot = Path.GetFullPath(GetUploadsRoot(env));
-        var normalized = relativePath.Replace('\\', '/').TrimStart('/');
-        if (normalized.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase))
-            normalized = normalized["uploads/".Length..];
+            // Security: Prevent path traversal
+            if (!combined.StartsWith(uploadsRoot, StringComparison.Ordinal))
+                return false;
 
-        if (normalized.Contains("..", StringComparison.Ordinal))
-            return false;
-
-        var candidate = Path.GetFullPath(Path.Combine(uploadsRoot, normalized));
-        var uploadsPrefix = uploadsRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!candidate.StartsWith(uploadsPrefix, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(candidate, uploadsRoot, StringComparison.OrdinalIgnoreCase))
+            fullPath = Path.GetFullPath(combined);
+            return true;
+        }
+        catch
         {
             return false;
         }
-
-        fullPath = candidate;
-        return true;
     }
 
-    public static string ToPublicUrl(string? relativePath)
+    public static string ToPublicUrl(string relativePath)
     {
-        if (string.IsNullOrWhiteSpace(relativePath))
-            return string.Empty;
-
-        var path = relativePath.Replace('\\', '/').TrimStart('/');
-        if (path.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase))
-            path = path["uploads/".Length..];
-
-        return $"/uploads/{path}";
+        return $"/uploads/{relativePath.Replace('\\', '/')}";
     }
 }

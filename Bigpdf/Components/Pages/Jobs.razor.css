@@ -1,0 +1,18 @@
+/* Jobs component scoped styles */
+.jobs-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.jobs-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1.5rem;
+}
+
+.jobs-table th,
+.jobs-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}

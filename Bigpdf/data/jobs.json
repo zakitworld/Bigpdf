@@ -1,5 +1,49 @@
 [
   {
+    "Id": "024b63d567c74fe782596c93dc72cbbc",
+    "Type": 11,
+    "Status": 2,
+    "Message": "Converted successfully",
+    "ResultPath": "uploads/20260721192321_0dfdbe734a9c4a8290a7367f685054db_document.pdf",
+    "CreatedAt": "2026-07-21T19:23:18.5854322Z",
+    "StartedAt": "2026-07-21T19:23:18.5942863Z",
+    "CompletedAt": "2026-07-21T19:23:21.196167Z",
+    "ProgressPercent": 100
+  },
+  {
+    "Id": "aa5424ca305a4ebf8d355275e24de6ee",
+    "Type": 3,
+    "Status": 3,
+    "Message": "LibreOffice (soffice) not found on the server. Please install LibreOffice or set Tools:LibreOfficePath in appsettings.json to convert complex Office binaries.",
+    "ResultPath": null,
+    "CreatedAt": "2026-07-21T19:17:52.0878019Z",
+    "StartedAt": "2026-07-21T19:17:52.09623Z",
+    "CompletedAt": "2026-07-21T19:17:52.2739738Z",
+    "ProgressPercent": 0
+  },
+  {
+    "Id": "39ac8322158e421c868475597e0abe57",
+    "Type": 11,
+    "Status": 2,
+    "Message": "Converted successfully (managed engine)",
+    "ResultPath": "uploads/20260721191243_d25d38e16b6a4df3820ef752f2f007c0_document.pdf",
+    "CreatedAt": "2026-07-21T19:12:41.7516039Z",
+    "StartedAt": "2026-07-21T19:12:41.7606808Z",
+    "CompletedAt": "2026-07-21T19:12:43.5535709Z",
+    "ProgressPercent": 100
+  },
+  {
+    "Id": "f0df18eaf33b4d45ba15e4ffa6519f7a",
+    "Type": 11,
+    "Status": 3,
+    "Message": "LibreOffice (soffice) not found on the server. Install LibreOffice and ensure \u0027soffice\u0027 is on PATH, or set Tools:LibreOfficePath / LIBREOFFICE_PATH, or configure it at /admin/tools.",
+    "ResultPath": null,
+    "CreatedAt": "2026-07-21T18:58:40.4691336Z",
+    "StartedAt": "2026-07-21T18:58:40.4780052Z",
+    "CompletedAt": "2026-07-21T18:58:40.7748005Z",
+    "ProgressPercent": 0
+  },
+  {
     "Id": "dc0070d4539942c3846d0e393d8aaca3",
     "Type": 0,
     "Status": 3,

@@ -736,18 +736,18 @@ h1, h2, h3, h4 {
 
 /* Login Page Styling */
 .login-container {
-    max-width: 450px;
-    margin: 5rem auto;
+    max-width: 420px;
+    margin: 1.5rem auto;
     background: var(--bg-surface);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-xl);
-    padding: 3rem 2.5rem;
+    padding: 2rem 2rem;
 }
 
 .login-header {
     text-align: center;
-    margin-bottom: 2rem;
+    margin-bottom: 1.25rem;
 }
 
 /* Error UI Reload Overlay */
@@ -1041,9 +1041,9 @@ body {
 
 .site-brand a,
 .footer-logo {
-    gap: 12px;
+    gap: 8px;
     color: #1f1f1f;
-    font-size: 2rem;
+    font-size: 1.5rem;
     font-weight: 800;
 }
 
@@ -1054,11 +1054,11 @@ body {
 
 .brand-mark {
     display: grid;
-    grid-template-columns: repeat(3, 20px);
-    grid-template-rows: repeat(3, 20px);
+    grid-template-columns: repeat(3, 12px);
+    grid-template-rows: repeat(3, 12px);
     overflow: hidden;
-    width: 60px;
-    height: 60px;
+    width: 36px;
+    height: 36px;
     border-radius: 6px;
     flex: 0 0 auto;
 }
@@ -1075,24 +1075,25 @@ body {
 
 .site-nav {
     flex: 1;
-    gap: 30px;
-    justify-content: flex-start;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
 }
 
 .site-nav a,
 .site-nav .nav-link {
     color: #111111;
-    font-size: 1.35rem;
-    font-weight: 500;
-    padding: 0;
-    border-radius: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
 }
 
 .site-nav .nav-link.active,
 .site-nav a:hover,
 .site-nav a.active {
-    color: #111111;
-    background: transparent;
+    color: #0f5bff;
+    background: rgba(15, 91, 255, 0.08);
 }
 
 .nav-tools {
@@ -1100,32 +1101,33 @@ body {
 }
 
 .site-actions {
-    gap: 28px;
-    padding-left: 34px;
-    border-left: 2px solid #dedede;
+    gap: 12px;
+    padding-left: 16px;
+    border-left: 1px solid #dedede;
+    flex-shrink: 0;
 }
 
 .login-link,
 .trial-button {
     color: #111111;
     text-decoration: none;
-    font-size: 1.25rem;
-    font-weight: 500;
+    font-size: 0.95rem;
+    font-weight: 600;
 }
 
 .trial-button {
-    min-width: 148px;
-    padding: 18px 24px;
+    min-width: auto;
+    padding: 8px 16px;
     color: #ffffff;
     text-align: center;
     background: #0f5bff;
     border-radius: 6px;
-    font-weight: 800;
+    font-weight: 700;
 }
 
 .site-main {
-    max-width: 1790px;
-    padding: 60px 48px 24px;
+    max-width: 1200px;
+    padding: 24px 20px 24px;
 }
 
 .tool-catalog {
@@ -1312,12 +1314,30 @@ body {
     }
 
     .site-nav {
-        gap: 18px;
+        gap: 0.35rem;
     }
 
     .site-nav a,
     .site-nav .nav-link {
-        font-size: 1.05rem;
+        font-size: 0.85rem;
+        padding: 0.25rem 0.4rem;
+    }
+}
+
+@media (max-width: 1080px) {
+    .site-header {
+        padding: 0 1rem;
+    }
+
+    .site-nav a,
+    .site-nav .nav-link {
+        font-size: 0.8rem;
+        padding: 0.2rem 0.35rem;
+    }
+
+    .site-actions {
+        gap: 8px;
+        padding-left: 10px;
     }
 }
 

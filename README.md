@@ -19,11 +19,11 @@ A feature-rich web application for PDF processing and manipulation built with .N
 
 ## 🛠️ Tech Stack
 
-- **Framework**: .NET 10 with Blazor (WebAssembly)
+- **Framework**: .NET 10 with Blazor Interactive Server
 - **Language**: C#
-- **UI**: Razor Components
-- **Authentication**: Built-in login/authorization system
-- **Background Processing**: Background task queue for async operations
+- **UI**: Razor Components with Interactive Server Render Mode
+- **Security & Middleware**: ASP.NET Core Cookie Auth, Rate Limiting, Security Headers (`nosniff`, `SAMEORIGIN`, `strict-origin-when-cross-origin`), and Magic Bytes File Validation
+- **Background Processing**: Background task queue for async job processing & File Cleanup Service
 
 ## 📁 Project Structure
 

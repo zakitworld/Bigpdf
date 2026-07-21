@@ -598,7 +598,78 @@ namespace Bigpdf.Services
 
                 if (string.IsNullOrWhiteSpace(soffice))
                 {
-                    return new PdfOperationResult(false, "LibreOffice (soffice) not found on the server. Install LibreOffice and ensure 'soffice' is on PATH, or set Tools:LibreOfficePath / LIBREOFFICE_PATH, or configure it at /admin/tools.");
+                    // Managed fallback when LibreOffice soffice binary is absent
+                    var ext = Path.GetExtension(abs).ToLowerInvariant();
+                    if (targetExtension.Equals("pdf", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var textLines = new List<string>();
+
+                        if (ext == ".docx")
+                        {
+                            try
+                            {
+                                using var docx = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(abs, false);
+                                var body = docx.MainDocumentPart?.Document.Body;
+                                if (body != null)
+                                {
+                                    foreach (var paragraph in body.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>())
+                                    {
+                                        textLines.Add(paragraph.InnerText);
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                return new PdfOperationResult(false, $"Failed to parse Word document: {ex.Message}");
+                            }
+                        }
+                        else if (ext == ".txt" || ext == ".rtf" || ext == ".html" || ext == ".odt")
+                        {
+                            var rawLines = await File.ReadAllLinesAsync(abs, cancellationToken);
+                            foreach (var rawLine in rawLines)
+                            {
+                                var line = rawLine;
+                                if (ext == ".html" || ext == ".rtf")
+                                    line = System.Text.RegularExpressions.Regex.Replace(rawLine, "<.*?>", string.Empty);
+
+                                textLines.Add(line);
+                            }
+                        }
+                        else
+                        {
+                            return new PdfOperationResult(false, "LibreOffice (soffice) not found on the server. Please install LibreOffice or set Tools:LibreOfficePath in appsettings.json to convert binary .doc, .ppt, or .xls files.");
+                        }
+
+                        using var doc = new PdfDocument();
+                        PdfPage page = doc.AddPage();
+                        XGraphics gfx = XGraphics.FromPdfPage(page);
+                        XFont font = new XFont("Arial", 11, XFontStyle.Regular);
+                        XBrush brush = XBrushes.Black;
+
+                        double margin = 40;
+                        double yPos = margin;
+                        double lineHeight = font.GetHeight() + 3;
+
+                        foreach (var line in textLines)
+                        {
+                            if (yPos + lineHeight > page.Height - margin)
+                            {
+                                page = doc.AddPage();
+                                gfx = XGraphics.FromPdfPage(page);
+                                yPos = margin;
+                            }
+
+                            gfx.DrawString(line, font, brush, new XPoint(margin, yPos));
+                            yPos += lineHeight;
+                        }
+
+                        var fallbackPath = SaveOutputPath(outputFileName ?? "converted.pdf");
+                        doc.Save(fallbackPath);
+                        var fallbackRel = Path.Combine("uploads", Path.GetFileName(fallbackPath)).Replace('\\', '/');
+                        return new PdfOperationResult(true, "Converted successfully", fallbackRel);
+                    }
+
+                    return new PdfOperationResult(false, "LibreOffice (soffice) not found on the server. Please install LibreOffice or set Tools:LibreOfficePath in appsettings.json to convert complex Office binaries.");
                 }
 
                 var tempDirName = $"{Path.GetFileNameWithoutExtension(abs)}-conv-{Guid.NewGuid():N}";

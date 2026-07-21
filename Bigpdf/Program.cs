@@ -113,7 +113,7 @@ app.MapPost("/api/jobs/start", async (HttpContext ctx, IJobService jobService) =
 {
     try
     {
-        var req = await ctx.Request.ReadFromJsonAsync<Models.JobRequest>();
+        var req = await ctx.Request.ReadFromJsonAsync<Bigpdf.Models.JobRequest>();
         if (req == null) return Results.BadRequest("Invalid request");
 
         var job = await jobService.EnqueueJobAsync(req);

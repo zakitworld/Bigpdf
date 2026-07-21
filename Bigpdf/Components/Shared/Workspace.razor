@@ -14,12 +14,19 @@
     <div class="workspace-container">
         @if (_isProcessing)
         {
-            <div class="spinner-wrapper">
-                <div class="spinner"></div>
-                <p style="font-weight: 600; color: var(--text-secondary);">@_processingText</p>
+            <div class="spinner-wrapper" style="display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 1.5rem 1rem;">
+                @if (string.IsNullOrEmpty(_jobId))
+                {
+                    <div class="spinner"></div>
+                }
+                <p style="font-weight: 600; color: var(--text-primary); margin: 0; text-align: center;">@_processingText</p>
+                @if (!string.IsNullOrEmpty(_selectedFileLabel))
+                {
+                    <p class="hint" style="margin: 0; text-align: center;">File: @_selectedFileLabel</p>
+                }
                 @if (!string.IsNullOrEmpty(_jobId))
                 {
-                    <global::Bigpdf.Components.JobTracker JobId="@_jobId" OnCompleted="OnJobFinished" />
+                    <global::Bigpdf.Components.JobTracker JobId="@_jobId" OnCompleted="OnJobFinished" OnStatusChanged="OnJobStatusChanged" />
                 }
             </div>
         }
@@ -173,12 +180,18 @@
     // For synchronous tasks that do not use Job queue
     [Parameter] public EventCallback<WorkspaceSubmitEventArgs> OnDirectSubmit { get; set; }
 
+    /// <summary>
+    /// Optional hook after a background job finishes (success or failure).
+    /// </summary>
+    [Parameter] public EventCallback<JobInfo> OnJobCompleted { get; set; }
+
     private IEnumerable<string>? _savedFiles;
     private List<string> _selectedFiles = new();
     private bool _isDragging = false;
     private bool _isProcessing = false;
     private string _processingText = "Uploading file...";
     private string? _jobId;
+    private string? _selectedFileLabel;
     private PdfOperationResult? _result;
 
     private const long MaxFileSize = 1024 * 1024 * 50; // 50 MB
@@ -364,7 +377,9 @@
         else if (JobTaskType.HasValue)
         {
             _isProcessing = true;
-            _processingText = "Queuing background task...";
+            _processingText = "Queuing conversion...";
+            _selectedFileLabel = string.Join(", ", _selectedFiles);
+            _jobId = null;
             StateHasChanged();
 
             try
@@ -379,18 +394,27 @@
 
                 var job = await JobService.EnqueueJobAsync(req);
                 _jobId = job.Id;
-                _processingText = "Background task running...";
+                _processingText = job.Message ?? "Conversion started...";
             }
             catch (Exception ex)
             {
                 _result = new PdfOperationResult(false, $"Error queuing job: {ex.Message}");
                 _isProcessing = false;
+                _jobId = null;
             }
             StateHasChanged();
         }
     }
 
-    private Task OnJobFinished(JobInfo job)
+    private Task OnJobStatusChanged(JobInfo job)
+    {
+        if (!string.IsNullOrWhiteSpace(job.Message))
+            _processingText = job.Message;
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnJobFinished(JobInfo job)
     {
         _isProcessing = false;
         _jobId = null;
@@ -403,10 +427,12 @@
         {
             _result = new PdfOperationResult(false, job.Message ?? "Operation failed on the server.");
         }
+
+        if (OnJobCompleted.HasDelegate)
+            await OnJobCompleted.InvokeAsync(job);
         
         _ = LoadFilesAsync();
         StateHasChanged();
-        return Task.CompletedTask;
     }
 
     public class WorkspaceSubmitEventArgs

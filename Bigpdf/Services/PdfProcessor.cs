@@ -31,23 +31,27 @@ namespace Bigpdf.Services
 
         private string? GetConfiguredToolPath(string key)
         {
-            // 1) Environment variable
-            try
+            // 1) Environment variables — accept both KEY and KE_Y forms
+            //    e.g. GhostscriptPath → GHOSTSCRIPTPATH and GHOSTSCRIPT_PATH
+            foreach (var envName in GetEnvironmentVariableNames(key))
             {
-                var fromEnv = Environment.GetEnvironmentVariable(key.ToUpperInvariant());
-                if (!string.IsNullOrWhiteSpace(fromEnv)) return fromEnv;
+                try
+                {
+                    var fromEnv = Environment.GetEnvironmentVariable(envName);
+                    if (!string.IsNullOrWhiteSpace(fromEnv)) return fromEnv.Trim().Trim('"');
+                }
+                catch { }
             }
-            catch { }
 
             // 2) appsettings (Tools:Key)
             try
             {
                 var cfg = _configuration?.GetSection("Tools")?[key];
-                if (!string.IsNullOrWhiteSpace(cfg)) return cfg;
+                if (!string.IsNullOrWhiteSpace(cfg)) return cfg.Trim().Trim('"');
             }
             catch { }
 
-            // 3) local toolpaths.json in content root
+            // 3) local toolpaths.json in content root (Admin → /admin/tools)
             try
             {
                 var file = Path.Combine(_env.ContentRootPath, "toolpaths.json");
@@ -58,7 +62,7 @@ namespace Bigpdf.Services
                     if (doc.RootElement.TryGetProperty(key, out var val) && val.ValueKind == System.Text.Json.JsonValueKind.String)
                     {
                         var s = val.GetString();
-                        if (!string.IsNullOrWhiteSpace(s)) return s;
+                        if (!string.IsNullOrWhiteSpace(s)) return s.Trim().Trim('"');
                     }
                 }
             }
@@ -66,6 +70,114 @@ namespace Bigpdf.Services
 
             return null;
         }
+
+        private static IEnumerable<string> GetEnvironmentVariableNames(string key)
+        {
+            var upper = key.ToUpperInvariant();
+            yield return upper;
+
+            // Insert underscores before capitals: GhostscriptPath → GHOSTSCRIPT_PATH
+            var withUnderscores = System.Text.RegularExpressions.Regex
+                .Replace(key, "(?<!^)([A-Z])", "_$1")
+                .ToUpperInvariant();
+            if (!string.Equals(withUnderscores, upper, StringComparison.Ordinal))
+                yield return withUnderscores;
+        }
+
+        private static IEnumerable<string> GetKnownGhostscriptPaths()
+        {
+            var roots = new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "gs"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "gs"),
+            };
+
+            foreach (var root in roots.Where(Directory.Exists))
+            {
+                foreach (var versionDir in Directory.EnumerateDirectories(root).OrderByDescending(d => d, StringComparer.OrdinalIgnoreCase))
+                {
+                    foreach (var exe in new[] { "gswin64c.exe", "gswin32c.exe", "gs.exe" })
+                    {
+                        var candidate = Path.Combine(versionDir, "bin", exe);
+                        if (File.Exists(candidate))
+                            yield return candidate;
+                    }
+                }
+            }
+        }
+
+        private static IEnumerable<string> GetKnownLibreOfficePaths()
+        {
+            var candidates = new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LibreOffice", "program", "soffice.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "LibreOffice", "program", "soffice.exe"),
+            };
+
+            foreach (var candidate in candidates)
+            {
+                if (File.Exists(candidate))
+                    yield return candidate;
+            }
+        }
+
+        private async Task<string?> ResolveExecutableAsync(
+            string configKey,
+            IEnumerable<string> pathCandidates,
+            IEnumerable<string> pathNames,
+            string versionArgs,
+            CancellationToken cancellationToken)
+        {
+            var configured = GetConfiguredToolPath(configKey);
+            if (!string.IsNullOrWhiteSpace(configured))
+            {
+                if (File.Exists(configured) || configured.IndexOfAny(new[] { '/', '\\', ':' }) < 0)
+                    return configured;
+            }
+
+            foreach (var candidate in pathCandidates)
+            {
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+
+            foreach (var name in pathNames)
+            {
+                try
+                {
+                    var probe = await RunProcessAsync(name, versionArgs, TimeSpan.FromSeconds(8), cancellationToken);
+                    if (probe.ExitCode == 0)
+                        return name;
+                }
+                catch { }
+            }
+
+            return null;
+        }
+
+        private Task<string?> ResolveGhostscriptAsync(CancellationToken cancellationToken) =>
+            ResolveExecutableAsync(
+                "GhostscriptPath",
+                GetKnownGhostscriptPaths(),
+                new[] { "gswin64c.exe", "gswin32c.exe", "gs", "gswin64c", "gswin32c" },
+                "--version",
+                cancellationToken);
+
+        private Task<string?> ResolveLibreOfficeAsync(CancellationToken cancellationToken) =>
+            ResolveExecutableAsync(
+                "LibreOfficePath",
+                GetKnownLibreOfficePaths(),
+                new[] { "soffice.exe", "soffice", "libreoffice" },
+                "--version",
+                cancellationToken);
+
+        private Task<string?> ResolveTesseractAsync(CancellationToken cancellationToken) =>
+            ResolveExecutableAsync(
+                "TesseractPath",
+                Array.Empty<string>(),
+                new[] { "tesseract.exe", "tesseract" },
+                "--version",
+                cancellationToken);
 
         private string AbsolutePath(string relative)
         {
@@ -155,31 +267,11 @@ namespace Bigpdf.Services
                 if (!Directory.Exists(tempAbs)) return new PdfOperationResult(false, "Failed to generate images for OCR");
 
                 // Find tesseract
-                string[] tessCandidates = { "tesseract", "tesseract.exe" };
-                string? tessExe = GetConfiguredToolPath("TesseractPath");
+                string? tessExe = await ResolveTesseractAsync(cancellationToken);
+
                 if (string.IsNullOrWhiteSpace(tessExe))
                 {
-                    foreach (var t in tessCandidates)
-                    {
-                        try
-                        {
-                            var probe = await RunProcessAsync(t, "--version", TimeSpan.FromSeconds(10), cancellationToken);
-                            if (probe.ExitCode == 0)
-                            {
-                                tessExe = t;
-                                break;
-                            }
-                        }
-                        catch
-                        {
-                            // ignore and try next candidate
-                        }
-                    }
-                }
-
-                if (tessExe == null)
-                {
-                    return new PdfOperationResult(false, "Tesseract not found on the server. Install Tesseract OCR and ensure 'tesseract' is on PATH. See https://github.com/tesseract-ocr/tesseract");
+                    return new PdfOperationResult(false, "Tesseract OCR not found. Install Tesseract and ensure it is on PATH, or set Tools:TesseractPath / TESSERACT_PATH.");
                 }
 
                 var outputTextPath = outputTextFileRelative;
@@ -348,29 +440,12 @@ namespace Bigpdf.Services
                 var outputDir = AbsolutePath(outputRel);
                 Directory.CreateDirectory(outputDir);
 
-                // Resolve Ghostscript executable: configured path (Tools:GhostscriptPath or GHOSTSCRIPT_PATH), then PATH candidates
-                string? gsExe = GetConfiguredToolPath("GhostscriptPath");
-                if (string.IsNullOrWhiteSpace(gsExe))
-                {
-                    string[] candidates = { "gs", "gswin64c.exe", "gswin32c.exe" };
-                    foreach (var c in candidates)
-                    {
-                        try
-                        {
-                            var probe = await RunProcessAsync(c, "--version", TimeSpan.FromSeconds(10), cancellationToken);
-                            if (probe.ExitCode == 0)
-                            {
-                                gsExe = c;
-                                break;
-                            }
-                        }
-                        catch { }
-                    }
-                }
+                // Resolve Ghostscript executable: configured path (Tools:GhostscriptPath or GHOSTSCRIPT_PATH), then common install dirs / PATH
+                string? gsExe = await ResolveGhostscriptAsync(cancellationToken);
 
                 if (string.IsNullOrWhiteSpace(gsExe))
                 {
-                    return new PdfOperationResult(false, "Ghostscript not found on the server. Install Ghostscript and ensure 'gs' or 'gswin64c.exe' is on PATH, or set the Tools:GhostscriptPath configuration or GHOSTSCRIPT_PATH environment variable to the gs executable path. See https://www.ghostscript.com/");
+                    return new PdfOperationResult(false, "Ghostscript not found on the server. Install Ghostscript and ensure 'gs' or 'gswin64c.exe' is on PATH, or set Tools:GhostscriptPath / GHOSTSCRIPT_PATH, or configure it at /admin/tools. See https://www.ghostscript.com/");
                 }
 
                 // Build Ghostscript arguments to render each page as JPEG
@@ -476,28 +551,11 @@ namespace Bigpdf.Services
                 var abs = AbsolutePath(inputRelativePath);
                 if (!File.Exists(abs)) return new PdfOperationResult(false, "Input file not found");
 
-                string? gsExe = GetConfiguredToolPath("GhostscriptPath");
+                string? gsExe = await ResolveGhostscriptAsync(cancellationToken);
+
                 if (string.IsNullOrWhiteSpace(gsExe))
                 {
-                    string[] candidates = { "gs", "gswin64c.exe", "gswin32c.exe" };
-                    foreach (var c in candidates)
-                    {
-                        try
-                        {
-                            var probe = await RunProcessAsync(c, "--version", TimeSpan.FromSeconds(10), cancellationToken);
-                            if (probe.ExitCode == 0)
-                            {
-                                gsExe = c;
-                                break;
-                            }
-                        }
-                        catch { }
-                    }
-                }
-
-                if (gsExe == null)
-                {
-                    return new PdfOperationResult(false, "Ghostscript not found on the server. Install Ghostscript and ensure 'gs' or 'gswin64c.exe' is on PATH, or set Tools:GhostscriptPath.");
+                    return new PdfOperationResult(false, "Ghostscript not found on the server. Install Ghostscript and ensure 'gs' or 'gswin64c.exe' is on PATH, or set Tools:GhostscriptPath / GHOSTSCRIPT_PATH, or configure it at /admin/tools.");
                 }
 
                 var outPath = SaveOutputPath(outputFileName ?? (Path.GetFileNameWithoutExtension(abs) + "-compressed.pdf"));
@@ -536,28 +594,11 @@ namespace Bigpdf.Services
                 var abs = AbsolutePath(inputRelativePath);
                 if (!File.Exists(abs)) return new PdfOperationResult(false, "Input file not found");
 
-                string? soffice = GetConfiguredToolPath("LibreOfficePath");
-                if (string.IsNullOrWhiteSpace(soffice))
-                {
-                    string[] candidates = { "soffice", "libreoffice", "soffice.exe" };
-                    foreach (var c in candidates)
-                    {
-                        try
-                        {
-                            var probe = await RunProcessAsync(c, "--version", TimeSpan.FromSeconds(10), cancellationToken);
-                            if (probe.ExitCode == 0)
-                            {
-                                soffice = c;
-                                break;
-                            }
-                        }
-                        catch { }
-                    }
-                }
+                string? soffice = await ResolveLibreOfficeAsync(cancellationToken);
 
                 if (string.IsNullOrWhiteSpace(soffice))
                 {
-                    return new PdfOperationResult(false, "LibreOffice (soffice) not found on the server. Install LibreOffice and make sure 'soffice' is on PATH, or configure Tools:LibreOfficePath.");
+                    return new PdfOperationResult(false, "LibreOffice (soffice) not found on the server. Install LibreOffice and ensure 'soffice' is on PATH, or set Tools:LibreOfficePath / LIBREOFFICE_PATH, or configure it at /admin/tools.");
                 }
 
                 var tempDirName = $"{Path.GetFileNameWithoutExtension(abs)}-conv-{Guid.NewGuid():N}";

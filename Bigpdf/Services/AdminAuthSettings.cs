@@ -1,22 +1,42 @@
+using System;
 using Microsoft.Extensions.Configuration;
 
-namespace Bigpdf.Services;
-
-public interface IAdminAuthSettings
+namespace Bigpdf.Services
 {
-    string Username { get; }
-    string Password { get; }
-}
-
-public class AdminAuthSettings : IAdminAuthSettings
-{
-    public string Username { get; }
-    public string Password { get; }
-
-    public AdminAuthSettings(IConfiguration configuration)
+    public interface IAdminAuthSettings
     {
-        var adminSection = configuration.GetSection("AdminAuth");
-        Username = adminSection["Username"] ?? "admin";
-        Password = adminSection["Password"] ?? "ChangeThisPassword123!";
+        string Username { get; }
+        string Password { get; }
+        bool IsUsingDefaultPassword { get; }
+    }
+
+    public class AdminAuthSettings : IAdminAuthSettings
+    {
+        private const string DefaultUsername = "admin";
+        private const string DefaultPassword = "ChangeThisPassword123!";
+        private readonly IConfiguration _configuration;
+
+        public AdminAuthSettings(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
+        public string Username => GetSetting("BIGPDF_ADMIN_USERNAME", "AdminAuth:Username", DefaultUsername);
+
+        public string Password => GetSetting("BIGPDF_ADMIN_PASSWORD", "AdminAuth:Password", DefaultPassword);
+
+        public bool IsUsingDefaultPassword => string.Equals(Password, DefaultPassword, StringComparison.Ordinal);
+
+        private string GetSetting(string environmentVariableName, string configurationKey, string fallback)
+        {
+            var envValue = Environment.GetEnvironmentVariable(environmentVariableName);
+            if (!string.IsNullOrWhiteSpace(envValue))
+            {
+                return envValue;
+            }
+
+            var configValue = _configuration[configurationKey];
+            return !string.IsNullOrWhiteSpace(configValue) ? configValue : fallback;
+        }
     }
 }

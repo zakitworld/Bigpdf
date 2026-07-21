@@ -2,7 +2,6 @@
 @using global::Bigpdf.Models
 @using global::Bigpdf.Services
 @using global::Bigpdf.Components.Shared
-@inject IJobService JobService
 @inject IPdfService PdfService
 @inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 @rendermode InteractiveServer
@@ -12,8 +11,9 @@
            Gradient="var(--grad-jpg)" 
            FileFilter=".pdf" 
            AllowMultiple="false" 
-           OutputName="pages"
-           OnDirectSubmit="HandlePdfToJpg" />
+           OutputName="converted-pages"
+           JobTaskType="JobType.PdfToJpg"
+           OnJobCompleted="LoadImages" />
 
 @if (_images.Any())
 {
@@ -42,47 +42,30 @@
 @code {
     private List<string> _images = new();
 
-    private async Task HandlePdfToJpg(Workspace.WorkspaceSubmitEventArgs args)
+    private Task LoadImages(JobInfo job)
     {
         _images.Clear();
-        var rel = Path.Combine("uploads", args.SelectedFiles.First()).Replace('\\', '/');
-        var req = new JobRequest { Type = JobType.PdfToJpg, InputRelativePath = rel };
 
-        var job = await JobService.EnqueueJobAsync(req);
-        
-        // Poll with async delay (non-blocking) instead of a tight while loop
-        while (job.Status == JobStatus.Pending || job.Status == JobStatus.Running)
-        {
-            await Task.Delay(1000);
-            var updated = JobService.GetJob(job.Id);
-            if (updated == null) break;
-            job = updated;
-        }
+        if (job.Status != JobStatus.Completed || string.IsNullOrEmpty(job.ResultPath))
+            return Task.CompletedTask;
 
-        if (job.Status == JobStatus.Completed && !string.IsNullOrEmpty(job.ResultPath))
+        try
         {
-            args.Result = new PdfOperationResult(true, job.Message ?? "Rendered PDF to JPG images.", job.ResultPath);
-            
-            // List the generated image files directly from disk instead of using HttpClient API
-            try
+            if (UploadPaths.TryResolveUploadPath(Env, job.ResultPath, out var fullPath) && Directory.Exists(fullPath))
             {
-                if (UploadPaths.TryResolveUploadPath(Env, job.ResultPath, out var fullPath) && Directory.Exists(fullPath))
-                {
-                    var uploadsRoot = UploadPaths.GetUploadsRoot(Env);
-                    _images = Directory.EnumerateFiles(fullPath)
-                        .OrderBy(f => f)
-                        .Select(f => UploadPaths.ToPublicUrl(Path.Combine("uploads", Path.GetRelativePath(uploadsRoot, f))))
-                        .ToList();
-                }
-            }
-            catch
-            {
-                // Ignore — user can still download from result path
+                var uploadsRoot = UploadPaths.GetUploadsRoot(Env);
+                _images = Directory.EnumerateFiles(fullPath, "*.jpg")
+                    .Concat(Directory.EnumerateFiles(fullPath, "*.jpeg"))
+                    .OrderBy(f => f)
+                    .Select(f => UploadPaths.ToPublicUrl(Path.Combine("uploads", Path.GetRelativePath(uploadsRoot, f))))
+                    .ToList();
             }
         }
-        else
+        catch
         {
-            args.Result = new PdfOperationResult(false, job.Message ?? "Failed to convert PDF to JPG.");
+            // Ignore — user can still download from result path
         }
+
+        return Task.CompletedTask;
     }
 }

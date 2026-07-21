@@ -1,0 +1,169 @@
+@page "/admin/tools"
+@using System.Text.Json
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
+@inject NavigationManager Nav
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<div style="max-width:720px;">
+    <h2 class="page-title">External Tool Paths</h2>
+    <p class="page-subtitle">
+        PDF to JPG / Compress need Ghostscript. PDF to Word / Office conversions need LibreOffice.
+        Values are saved to <code>toolpaths.json</code> and take effect immediately for new jobs.
+    </p>
+
+    <div class="workspace-container" style="padding: 1.5rem;">
+        <div class="form-group">
+            <label class="form-label">LibreOffice (soffice) path</label>
+            <input class="form-control" @bind="LibreOfficePath" placeholder="C:\Program Files\LibreOffice\program\soffice.exe" />
+            <small class="hint">Used for PDF ↔ Word/PowerPoint/Excel and other office conversions.</small>
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+            <label class="form-label">Ghostscript (gs) path</label>
+            <input class="form-control" @bind="GhostscriptPath" placeholder="C:\Program Files\gs\gs10.xx\bin\gswin64c.exe" />
+            <small class="hint">Used for PDF to JPG rendering and PDF compression.</small>
+        </div>
+        <div class="form-group" style="margin-top: 1rem;">
+            <label class="form-label">Tesseract path (optional)</label>
+            <input class="form-control" @bind="TesseractPath" placeholder="C:\Program Files\Tesseract-OCR\tesseract.exe" />
+            <small class="hint">Used for OCR.</small>
+        </div>
+
+        <div style="display:flex; gap:0.5rem; margin-top:1.25rem; flex-wrap: wrap;">
+            <button class="btn btn-primary" @onclick="Save">Save paths</button>
+            <button class="btn btn-secondary" @onclick="DetectCommonPaths">Auto-detect</button>
+            <button class="btn btn-secondary" @onclick="Reset">Clear</button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Message))
+        {
+            <div style="margin-top:1rem;" class="alert @(Message.Contains("fail", StringComparison.OrdinalIgnoreCase) || Message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? "alert-error" : "alert-success")">@Message</div>
+        }
+
+        <div class="alert alert-warning" style="margin-top: 1.25rem; font-size: 0.9rem;">
+            <strong>Install helpers:</strong>
+            <ul style="margin: 0.5rem 0 0 1.1rem; padding: 0;">
+                <li><code>tools/install-ghostscript.ps1</code></li>
+                <li><code>tools/install-libreoffice.ps1</code></li>
+            </ul>
+            After installing, click <strong>Auto-detect</strong> or paste the executable path here, then retry your conversion.
+        </div>
+    </div>
+</div>
+
+@code {
+    private string? LibreOfficePath { get; set; }
+    private string? GhostscriptPath { get; set; }
+    private string? TesseractPath { get; set; }
+    private string? Message { get; set; }
+
+    protected override void OnInitialized()
+    {
+        LoadFromDisk();
+    }
+
+    private void LoadFromDisk()
+    {
+        var file = Path.Combine(Env.ContentRootPath, "toolpaths.json");
+        if (!File.Exists(file)) return;
+
+        try
+        {
+            var json = File.ReadAllText(file);
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("LibreOfficePath", out var l)) LibreOfficePath = l.GetString();
+            if (doc.RootElement.TryGetProperty("GhostscriptPath", out var g)) GhostscriptPath = g.GetString();
+            if (doc.RootElement.TryGetProperty("TesseractPath", out var t)) TesseractPath = t.GetString();
+        }
+        catch { }
+    }
+
+    private void Save()
+    {
+        var file = Path.Combine(Env.ContentRootPath, "toolpaths.json");
+        var obj = new Dictionary<string, string?>
+        {
+            ["LibreOfficePath"] = string.IsNullOrWhiteSpace(LibreOfficePath) ? null : LibreOfficePath.Trim().Trim('"'),
+            ["GhostscriptPath"] = string.IsNullOrWhiteSpace(GhostscriptPath) ? null : GhostscriptPath.Trim().Trim('"'),
+            ["TesseractPath"] = string.IsNullOrWhiteSpace(TesseractPath) ? null : TesseractPath.Trim().Trim('"'),
+        };
+        var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(file, json);
+        Message = "Tool paths saved. New conversions will use these paths.";
+    }
+
+    private void DetectCommonPaths()
+    {
+        GhostscriptPath ??= FindGhostscript();
+        LibreOfficePath ??= FindLibreOffice();
+        TesseractPath ??= FindTesseract();
+
+        var found = new List<string>();
+        if (!string.IsNullOrWhiteSpace(GhostscriptPath)) found.Add("Ghostscript");
+        if (!string.IsNullOrWhiteSpace(LibreOfficePath)) found.Add("LibreOffice");
+        if (!string.IsNullOrWhiteSpace(TesseractPath)) found.Add("Tesseract");
+
+        Message = found.Count > 0
+            ? $"Detected: {string.Join(", ", found)}. Click Save paths to keep them."
+            : "No tools found in common install folders. Install them first, then try again.";
+    }
+
+    private void Reset()
+    {
+        LibreOfficePath = null;
+        GhostscriptPath = null;
+        TesseractPath = null;
+        var file = Path.Combine(Env.ContentRootPath, "toolpaths.json");
+        if (File.Exists(file)) File.Delete(file);
+        Message = "Cleared saved tool paths.";
+    }
+
+    private static string? FindGhostscript()
+    {
+        foreach (var root in new[]
+                 {
+                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "gs"),
+                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "gs"),
+                 })
+        {
+            if (!Directory.Exists(root)) continue;
+            foreach (var versionDir in Directory.EnumerateDirectories(root).OrderByDescending(d => d))
+            {
+                foreach (var exe in new[] { "gswin64c.exe", "gswin32c.exe", "gs.exe" })
+                {
+                    var candidate = Path.Combine(versionDir, "bin", exe);
+                    if (File.Exists(candidate)) return candidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FindLibreOffice()
+    {
+        foreach (var candidate in new[]
+                 {
+                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "LibreOffice", "program", "soffice.exe"),
+                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "LibreOffice", "program", "soffice.exe"),
+                 })
+        {
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        return null;
+    }
+
+    private static string? FindTesseract()
+    {
+        foreach (var candidate in new[]
+                 {
+                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Tesseract-OCR", "tesseract.exe"),
+                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Tesseract-OCR", "tesseract.exe"),
+                 })
+        {
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        return null;
+    }
+}

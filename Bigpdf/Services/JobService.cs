@@ -35,7 +35,7 @@ namespace Bigpdf.Services
             {
                 job.Status = JobStatus.Running;
                 job.StartedAt = DateTime.UtcNow;
-                job.ProgressPercent = 5;
+                job.ProgressPercent = 10;
                 job.Message = $"Starting {GetJobLabel(request.Type)}...";
                 _store.Update(job);
 
@@ -45,7 +45,20 @@ namespace Bigpdf.Services
                     timeoutCts.CancelAfter(GetJobTimeout(request.Type));
                     var jobToken = timeoutCts.Token;
 
-                    var outputFolder = request.OutputName ?? "converted-pages";
+                    var outputFolder = string.IsNullOrWhiteSpace(request.OutputName) || request.OutputName == "pages"
+                        ? "converted-pages"
+                        : request.OutputName;
+
+                    // Prefer a unique output folder for image renders so concurrent jobs don't collide.
+                    if (request.Type == JobType.PdfToJpg)
+                    {
+                        var inputName = Path.GetFileNameWithoutExtension(request.InputRelativePath ?? "document");
+                        outputFolder = Path.Combine("uploads", $"{inputName}-pages-{Guid.NewGuid():N}").Replace('\\', '/');
+                    }
+
+                    job.ProgressPercent = 25;
+                    job.Message = $"Running {GetJobLabel(request.Type)}...";
+                    _store.Update(job);
 
                     PdfOperationResult result = request.Type switch
                     {
@@ -134,7 +147,7 @@ namespace Bigpdf.Services
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
                     job.Status = JobStatus.Failed;
-                    job.Message = $"{GetJobLabel(request.Type)} timed out. The converter may be missing, blocked, or the file may be too large. Try a smaller file or check the server tool configuration.";
+                    job.Message = $"{GetJobLabel(request.Type)} timed out. The converter may be missing, blocked, or the file may be too large. Try a smaller file or check the server tool configuration at /admin/tools.";
                     job.ProgressPercent = 0;
                 }
                 catch (Exception ex)

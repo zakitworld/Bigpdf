@@ -3,21 +3,21 @@
 
 @if (_job is not null)
 {
-    <div class="job-card">
+    <div class="job-card" style="width: 100%; max-width: 520px; text-align: left; margin-top: 1.25rem;">
         <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem;">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2">
                     <circle cx="12" cy="12" r="10"/>
                     <polyline points="12 6 12 12 16 14"/>
                 </svg>
-                <strong style="font-size: 0.95rem; color: var(--text-primary);">Job Tracker: @JobId?.Substring(0, Math.Min(8, JobId.Length))</strong>
+                <strong style="font-size: 0.95rem; color: var(--text-primary);">Conversion status</strong>
             </div>
             
             <div>
                 @switch (_job.Status)
                 {
                     case JobStatus.Pending:
-                        <span class="alert alert-warning" style="padding: 0.25rem 0.6rem; margin: 0; font-size: 0.8rem; border-radius: var(--radius-full); display: inline-flex;">Pending</span>
+                        <span class="alert alert-warning" style="padding: 0.25rem 0.6rem; margin: 0; font-size: 0.8rem; border-radius: var(--radius-full); display: inline-flex;">Queued</span>
                         break;
                     case JobStatus.Running:
                         <span class="alert alert-success" style="padding: 0.25rem 0.6rem; margin: 0; font-size: 0.8rem; border-radius: var(--radius-full); display: inline-flex; background: var(--primary-light); color: var(--primary); border-color: transparent;">Processing</span>
@@ -41,10 +41,13 @@
                         @(_job.Message ?? "Performing operation on document(s)...")
                     </span>
                 </div>
-                <div class="progress-container" style="max-width: 360px;">
-                    <div class="progress-fill" style="@($"width:{Math.Clamp(_job.ProgressPercent ?? 10, 5, 95)}%")"></div>
+                <div class="progress-container" style="max-width: 100%;">
+                    <div class="progress-fill" style="@($"width:{GetProgressWidth(_job)}%")"></div>
                 </div>
-                <span class="hint">Elapsed: @FormatElapsed(_job.StartedAt ?? _job.CreatedAt). Long conversions fail automatically instead of running forever.</span>
+                <div style="display: flex; justify-content: space-between; gap: 1rem;">
+                    <span class="hint">@GetProgressWidth(_job)% complete</span>
+                    <span class="hint">Elapsed: @FormatElapsed(_job.StartedAt ?? _job.CreatedAt)</span>
+                </div>
             </div>
         }
         else if (_job.Status == JobStatus.Completed)
@@ -68,12 +71,16 @@
         else if (_job.Status == JobStatus.Failed)
         {
             <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                <span class="job-error" style="font-size: 0.9rem; font-weight: 600;">Error: @(_job.Message ?? "Job execution failed.")</span>
+                <span class="job-error" style="font-size: 0.9rem; font-weight: 600;">@(_job.Message ?? "Job execution failed.")</span>
                 
-                @if (_job.Message != null && (_job.Message.Contains("Ghostscript") || _job.Message.Contains("Tesseract") || _job.Message.Contains("LibreOffice")))
+                @if (IsMissingToolError(_job.Message))
                 {
-                    <div class="alert alert-warning" style="margin-top: 0.5rem; font-size: 0.8rem; padding: 0.5rem 0.75rem;">
-                        <strong>Deployment Note:</strong> External command dependencies are missing from host. Make sure to download and register them in host system PATH variables.
+                    <div class="alert alert-warning" style="margin-top: 0.5rem; font-size: 0.85rem; padding: 0.75rem 1rem;">
+                        <strong>Missing converter tool.</strong>
+                        <div style="margin-top: 0.35rem;">
+                            Set the executable path at <a href="/admin/tools">/admin/tools</a>,
+                            or run the install scripts in <code>tools/</code>, then restart the app.
+                        </div>
                     </div>
                 }
             </div>
@@ -84,15 +91,20 @@
 @code {
     [Parameter] public string? JobId { get; set; }
     [Parameter] public EventCallback<JobInfo> OnCompleted { get; set; }
+    [Parameter] public EventCallback<JobInfo> OnStatusChanged { get; set; }
 
     private JobInfo? _job;
     private CancellationTokenSource? _pollCts;
+    private string? _activeJobId;
+    private bool _completionNotified;
 
     protected override void OnParametersSet()
     {
-        if (string.IsNullOrEmpty(JobId))
+        if (string.IsNullOrEmpty(JobId) || string.Equals(JobId, _activeJobId, StringComparison.Ordinal))
             return;
 
+        _activeJobId = JobId;
+        _completionNotified = false;
         StopPolling();
         _pollCts = new CancellationTokenSource();
         _ = PollJobAsync(_pollCts.Token);
@@ -104,17 +116,22 @@
         {
             try
             {
-                // Use injected IJobService directly instead of HttpClient
-                // HttpClient in Blazor Server doesn't carry user auth cookies
-                var job = JobService.GetJob(JobId!);
+                var job = JobService.GetJob(_activeJobId!);
                 if (job is not null)
                 {
                     _job = job;
                     await InvokeAsync(StateHasChanged);
 
+                    if (OnStatusChanged.HasDelegate)
+                        await OnStatusChanged.InvokeAsync(job);
+
                     if (job.Status is JobStatus.Completed or JobStatus.Failed)
                     {
-                        await OnCompleted.InvokeAsync(job);
+                        if (!_completionNotified && OnCompleted.HasDelegate)
+                        {
+                            _completionNotified = true;
+                            await OnCompleted.InvokeAsync(job);
+                        }
                         break;
                     }
                 }
@@ -126,7 +143,7 @@
 
             try
             {
-                await Task.Delay(1500, cancellationToken);
+                await Task.Delay(1000, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -143,6 +160,19 @@
     }
 
     public void Dispose() => StopPolling();
+
+    private static int GetProgressWidth(JobInfo job)
+    {
+        if (job.Status == JobStatus.Completed) return 100;
+        if (job.Status == JobStatus.Failed) return 0;
+        return Math.Clamp(job.ProgressPercent ?? 10, 5, 95);
+    }
+
+    private static bool IsMissingToolError(string? message) =>
+        !string.IsNullOrEmpty(message) &&
+        (message.Contains("Ghostscript", StringComparison.OrdinalIgnoreCase)
+         || message.Contains("Tesseract", StringComparison.OrdinalIgnoreCase)
+         || message.Contains("LibreOffice", StringComparison.OrdinalIgnoreCase));
 
     private static string FormatElapsed(DateTime startedAt)
     {

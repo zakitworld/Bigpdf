@@ -1,64 +1,85 @@
-using Bigpdf.Models;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Bigpdf.Services;
-
-public class PdfService : IPdfService
+namespace Bigpdf.Services
 {
-    private readonly IPdfProcessor _pdfProcessor;
-    private readonly ILogger<PdfService> _logger;
-
-    public PdfService(IPdfProcessor pdfProcessor, ILogger<PdfService> logger)
+    public class PdfService : IPdfService
     {
-        _pdfProcessor = pdfProcessor;
-        _logger = logger;
+        private readonly string _uploadsFolder;
+        private readonly ILogger<PdfService> _logger;
+
+        public PdfService(IWebHostEnvironment env, ILogger<PdfService> logger)
+        {
+            _uploadsFolder = UploadPaths.GetUploadsRoot(env);
+            _logger = logger;
+            if (!Directory.Exists(_uploadsFolder))
+            {
+                Directory.CreateDirectory(_uploadsFolder);
+            }
+        }
+
+        public async Task<string?> SaveFileAsync(Stream stream, string fileName, string contentType, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var safeName = Path.GetFileName(fileName) ?? "upload";
+                var finalName = $"{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}_{safeName}";
+                var targetPath = Path.Combine(_uploadsFolder, finalName);
+
+                await using (var fs = new FileStream(targetPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    await stream.CopyToAsync(fs, 81920, cancellationToken).ConfigureAwait(false);
+                }
+
+                return Path.Combine("uploads", finalName).Replace('\\', '/');
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save uploaded file {FileName}", fileName);
+                return null;
+            }
+        }
+
+        public Task<IEnumerable<string>> ListFilesAsync()
+        {
+            if (!Directory.Exists(_uploadsFolder))
+            {
+                return Task.FromResult(Enumerable.Empty<string>());
+            }
+
+            var files = Directory.EnumerateFiles(_uploadsFolder)
+                .Select(Path.GetFileName)
+                .Where(n => n != null)
+                .Cast<string>()
+                .OrderByDescending(n => n)
+                .ToList();
+
+            return Task.FromResult<IEnumerable<string>>(files);
+        }
+
+        public Task<bool> DeleteFileAsync(string fileName)
+        {
+            try
+            {
+                var targetPath = Path.Combine(_uploadsFolder, Path.GetFileName(fileName));
+                if (File.Exists(targetPath))
+                {
+                    File.Delete(targetPath);
+                    return Task.FromResult(true);
+                }
+                return Task.FromResult(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to delete file {FileName}", fileName);
+                return Task.FromResult(false);
+            }
+        }
     }
-
-    public async Task<PdfOperationResult> CompressPdfAsync(string filePath, int quality = 85)
-    {
-        try
-        {
-            _logger.LogInformation("Compressing PDF: {FilePath}", filePath);
-            var result = await _pdfProcessor.CompressAsync(filePath, quality);
-            return new PdfOperationResult { Success = true, OutputPath = result, Message = "PDF compressed successfully" };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to compress PDF");
-            return new PdfOperationResult { Success = false, Message = ex.Message };
-        }
-    }
-
-    public async Task<PdfOperationResult> MergePdfsAsync(IEnumerable<string> filePaths)
-    {
-        try
-        {
-            var result = await _pdfProcessor.MergeAsync(filePaths);
-            return new PdfOperationResult { Success = true, OutputPath = result, Message = "PDFs merged successfully" };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to merge PDFs");
-            return new PdfOperationResult { Success = false, Message = ex.Message };
-        }
-    }
-
-    // Implement other methods similarly...
-    public Task<PdfOperationResult> SplitPdfAsync(string filePath, string pageRanges)
-        => Task.FromResult(new PdfOperationResult { Success = false, Message = "Not implemented yet" });
-
-    public Task<PdfOperationResult> AddWatermarkAsync(string filePath, string watermarkText, float opacity = 0.6f)
-        => Task.FromResult(new PdfOperationResult { Success = false, Message = "Not implemented yet" });
-
-    public Task<PdfOperationResult> ConvertToImagesAsync(string filePath, string outputFormat = "jpg")
-        => Task.FromResult(new PdfOperationResult { Success = false, Message = "Not implemented yet" });
-
-    public Task<PdfOperationResult> AddPageNumbersAsync(string filePath)
-        => Task.FromResult(new PdfOperationResult { Success = false, Message = "Not implemented yet" });
-
-    public Task<PdfOperationResult> PerformOcrAsync(string filePath)
-        => Task.FromResult(new PdfOperationResult { Success = false, Message = "Not implemented yet" });
-
-    public Task<PdfOperationResult> ConvertOfficeToPdfAsync(string filePath)
-        => Task.FromResult(new PdfOperationResult { Success = false, Message = "Not implemented yet" });
 }
